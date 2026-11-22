@@ -46,6 +46,7 @@
       font-size: 14px;
       font-weight: 600;
       transition: background 0.15s, transform 0.1s, opacity 0.15s;
+      -webkit-tap-highlight-color: transparent;
     }
     button:active { transform: scale(0.98); }
     button:disabled { opacity: 0.5; cursor: not-allowed; }
@@ -350,10 +351,29 @@
       margin-bottom: 6px;
       word-break: break-word;
     }
+    .word-phonetic-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      margin-bottom: 14px;
+      flex-wrap: wrap;
+    }
     .word-phonetic {
       font-size: 16px;
       color: var(--text-muted);
-      margin-bottom: 14px;
+    }
+    .audio-badge {
+      font-size: 11px;
+      padding: 2px 7px;
+      border-radius: 99px;
+      font-weight: 600;
+      background: var(--primary-light);
+      color: var(--primary);
+    }
+    .audio-badge.tts {
+      background: #f1f5f9;
+      color: var(--text-muted);
     }
     .reveal-hint {
       font-size: 13px;
@@ -533,7 +553,7 @@
     <div class="auth-card">
       <div class="auth-logo">10</div>
       <h1>Daily10 單字背誦與紀錄</h1>
-      <p class="subtitle">10,000 常用字詞庫・Google 帳號雲端同步・自動例句</p>
+      <p class="subtitle">10,000 常用字詞庫・Google 帳號雲端同步・真人 MP3 發音</p>
 
       <div id="authAlert" class="alert alert-error hidden"></div>
 
@@ -630,7 +650,10 @@
 
               <div id="cardContent" style="width:100%;">
                 <div id="cardTerm" class="word-term">---</div>
-                <div id="cardPhonetic" class="word-phonetic"></div>
+                <div class="word-phonetic-row">
+                  <span id="cardPhonetic" class="word-phonetic"></span>
+                  <span id="cardAudioBadge" class="audio-badge hidden"></span>
+                </div>
                 <div id="cardRevealHint" class="reveal-hint">點擊卡片或按 Space 顯示釋義與例句</div>
 
                 <div id="cardBack" class="word-back hidden">
@@ -786,7 +809,7 @@
 
 <script>
 // ============================================================
-// 1. 預填 Supabase 連線設定（已自動移除多餘的 /rest/v1/ 路徑）
+// 1. 預填 Supabase 連線設定
 // ============================================================
 const DEFAULT_SUPABASE_URL = 'https://grzxlgbjoghaumzcewpu.supabase.co';
 const DEFAULT_SUPABASE_ANON_KEY = 'sb_publishable_md0pPzNBM4rwMJICotLotg_DtdgKVT7';
@@ -796,7 +819,7 @@ const LS_CFG_KEY = 'daily10_supabase_key';
 const LS_DEMO_ASSIGN = 'daily10_demo_assignments_v1';
 const LS_DEMO_LOGS = 'daily10_demo_logs_v1';
 
-// 內建 50 個備援單字（僅在找不到 ./vocab_10k.json 時使用）
+// 內建 30 個備援單字（僅在找不到 ./vocab_10k.json 時使用）
 const FALLBACK_WORDS = [
   { term: 'ubiquitous', phonetic: '/juːˈbɪk.wɪ.təs/', meaning: 'adj. 無所不在的；普遍存在的', example: 'Smartphones have become ubiquitous in modern daily life.' },
   { term: 'pragmatic', phonetic: '/præɡˈmæt.ɪk/', meaning: 'adj. 務實的；講求實效的', example: 'We need a pragmatic approach to solve this budget issue.' },
@@ -937,11 +960,164 @@ const State = {
   vocabSearch: '',
   logsPage: 1,
   logsFilter: 'all',
-  fetchingExampleFor: null
+  fetchingDictTerms: new Set()
 };
 
 // ============================================================
-// 4. 工具函式
+// 4. 語音引擎（真人 MP3 優先 + iOS Safari speechSynthesis 修正）
+// ============================================================
+const AudioEngine = {
+  // 共用單一 Audio 實例，避免 iOS Safari 多重建立被阻擋
+  player: new Audio(),
+  voices: [],
+  ttsTimer: null,
+
+  init() {
+    this.player.preload = 'auto';
+    if ('speechSynthesis' in window) {
+      const loadVoices = () => {
+        this.voices = window.speechSynthesis.getVoices() || [];
+      };
+      loadVoices();
+      if (typeof window.speechSynthesis.onvoiceschanged !== 'undefined') {
+        window.speechSynthesis.onvoiceschanged = loadVoices;
+      }
+    }
+  },
+
+  pickEnglishVoice() {
+    if (!this.voices.length && 'speechSynthesis' in window) {
+      this.voices = window.speechSynthesis.getVoices() || [];
+    }
+    if (!this.voices.length) return null;
+    // 優先順序：美式自然語音 -> 任意 en-US -> 任意 en
+    return (
+      this.voices.find(v => /en[-_]US/i.test(v.lang) && /Samantha|Alex|Aaron|Google US|Natural/i.test(v.name)) ||
+      this.voices.find(v => /en[-_]US/i.test(v.lang)) ||
+      this.voices.find(v => /^en/i.test(v.lang)) ||
+      null
+    );
+  },
+
+  stopAll() {
+    try {
+      this.player.pause();
+      this.player.currentTime = 0;
+    } catch (_) {}
+    if (this.ttsTimer) {
+      clearTimeout(this.ttsTimer);
+      this.ttsTimer = null;
+    }
+    if ('speechSynthesis' in window && (window.speechSynthesis.speaking || window.speechSynthesis.pending)) {
+      try { window.speechSynthesis.cancel(); } catch (_) {}
+    }
+  },
+
+  // 修正 iOS Safari speechSynthesis 相容性（避免 cancel 緊接 speak 吞音、防止 GC、指定英文語音）
+  speakTTS(text) {
+    if (!text || !('speechSynthesis' in window)) {
+      showToast('目前瀏覽器不支援語音朗讀');
+      return;
+    }
+    const synth = window.speechSynthesis;
+    const needsCancel = synth.speaking || synth.pending;
+
+    if (this.ttsTimer) {
+      clearTimeout(this.ttsTimer);
+      this.ttsTimer = null;
+    }
+
+    const doSpeak = () => {
+      try {
+        if (synth.paused) synth.resume();
+        const u = new SpeechSynthesisUtterance(text);
+        u.lang = 'en-US';
+        u.rate = 0.95;
+        u.volume = 1.0;
+        const voice = this.pickEnglishVoice();
+        if (voice) u.voice = voice;
+        // 保留全域參照，防止 Safari/Chrome 提早 GC 導致發音中斷
+        window._activeUtterance = u;
+        u.onend = () => { if (window._activeUtterance === u) window._activeUtterance = null; };
+        u.onerror = () => { if (window._activeUtterance === u) window._activeUtterance = null; };
+        synth.speak(u);
+      } catch (err) {
+        console.warn('TTS error:', err);
+      }
+    };
+
+    if (needsCancel) {
+      synth.cancel();
+      // iOS Safari 需短暫延遲再呼叫 speak，否則會被前一次 cancel 吞掉
+      this.ttsTimer = setTimeout(doSpeak, 65);
+    } else {
+      doSpeak();
+    }
+  },
+
+  // 優先播放快取的真人 MP3，失敗或無音檔時自動退回系統語音
+  async speakWord(termOrWordObj) {
+    const wordObj = typeof termOrWordObj === 'string'
+      ? (State.wordsMap.get(termOrWordObj.toLowerCase()) || { term: termOrWordObj, term_lower: termOrWordObj.toLowerCase(), audio_url: '' })
+      : termOrWordObj;
+
+    if (!wordObj || !wordObj.term) return;
+    this.stopAll();
+
+    // 狀況 1：已有快取的真人 MP3 網址 -> 在點擊事件中同步啟動播放（完全符合 iOS Safari 規範）
+    if (wordObj.audio_url && wordObj.audio_url.startsWith('http')) {
+      this.playMp3WithFallback(wordObj.audio_url, wordObj.term);
+      return;
+    }
+
+    // 狀況 2：明確查過且無 MP3 -> 直接用系統語音
+    if (wordObj.audio_url === '__NONE__') {
+      this.speakTTS(wordObj.term);
+      return;
+    }
+
+    // 狀況 3：尚未抓取過字典資料 -> 先即刻嘗試抓一次，若 iOS 阻擋非同步 audio.play() 則自動退回 TTS
+    try {
+      await fetchDictionaryInfo(wordObj);
+      if (wordObj.audio_url && wordObj.audio_url.startsWith('http')) {
+        this.playMp3WithFallback(wordObj.audio_url, wordObj.term);
+      } else {
+        this.speakTTS(wordObj.term);
+      }
+    } catch (_) {
+      this.speakTTS(wordObj.term);
+    }
+  },
+
+  playMp3WithFallback(url, fallbackText) {
+    const audio = this.player;
+    let fellBack = false;
+    const fallback = () => {
+      if (fellBack) return;
+      fellBack = true;
+      this.speakTTS(fallbackText);
+    };
+
+    audio.onerror = fallback;
+    audio.src = url;
+    try {
+      const playPromise = audio.play();
+      if (playPromise && typeof playPromise.catch === 'function') {
+        playPromise.catch(() => fallback());
+      }
+    } catch (_) {
+      fallback();
+    }
+  }
+};
+
+// 全域捷徑給表格內按鈕呼叫
+function speakWordByTerm(term) {
+  AudioEngine.speakWord(term);
+}
+
+// ============================================================
+// 5. 工具函式
 // ============================================================
 function getLocalDateStr(d) {
   const y = d.getFullYear();
@@ -986,15 +1162,6 @@ function setVocabLoading(show, text = '', pct = 0) {
   document.getElementById('vocabLoadingPct').textContent = `${pct}%`;
 }
 
-function speakText(text) {
-  if (!text || !('speechSynthesis' in window)) return;
-  window.speechSynthesis.cancel();
-  const u = new SpeechSynthesisUtterance(text);
-  u.lang = 'en-US';
-  u.rate = 0.95;
-  window.speechSynthesis.speak(u);
-}
-
 function normalizeWordItems(rawArr) {
   const map = new Map();
   let rank = 1;
@@ -1009,6 +1176,7 @@ function normalizeWordItems(rawArr) {
       phonetic: String(r.phonetic || '').trim(),
       meaning: String(r.meaning || r.translation || '').trim(),
       example: String(r.example || '').trim(),
+      audio_url: String(r.audio_url || '').trim(),
       rank: rank++
     });
   }
@@ -1030,7 +1198,7 @@ function translateSupabaseError(err) {
 }
 
 // ============================================================
-// 5. 詞庫載入（優先 IndexedDB -> 自動抓 ./vocab_10k.json -> 備援 30 字）
+// 6. 詞庫載入（優先 IndexedDB -> 自動抓 ./vocab_10k.json -> 備援 30 字）
 // ============================================================
 async function ensureVocabLoaded(forceFetch10k = false) {
   let count = 0;
@@ -1076,7 +1244,7 @@ async function ensureVocabLoaded(forceFetch10k = false) {
 }
 
 // ============================================================
-// 6. 資料存取層（自動切換 Supabase 雲端 / 本機 Demo）
+// 7. 資料存取層（自動切換 Supabase 雲端 / 本機 Demo）
 // ============================================================
 const DataLayer = {
   async loadUserRecords() {
@@ -1180,7 +1348,7 @@ const DataLayer = {
 };
 
 // ============================================================
-// 7. 嚴格未背誦過濾與派發邏輯
+// 8. 嚴格未背誦過濾與派發邏輯
 // ============================================================
 function getStudiedTermSet() {
   const set = new Set();
@@ -1299,54 +1467,93 @@ async function rerollSingleAssignment(assignment) {
 }
 
 // ============================================================
-// 8. Free Dictionary API 即時補齊例句並快取至 IndexedDB
+// 9. Free Dictionary API：一次補齊「真人 MP3 音檔 + 例句 + 音標」並快取至 IndexedDB
 // ============================================================
-async function fetchExampleIfMissing(wordObj) {
-  if (!wordObj || wordObj.example) return;
-  const termLower = wordObj.term_lower;
-  if (State.fetchingExampleFor === termLower) return;
-  State.fetchingExampleFor = termLower;
+function normalizeAudioUrl(url) {
+  const s = String(url || '').trim();
+  if (!s) return '';
+  if (s.startsWith('//')) return 'https:' + s;
+  if (s.startsWith('http://')) return s.replace(/^http:\/\//i, 'https://');
+  return s;
+}
 
-  const exEl = document.getElementById('cardExample');
-  if (exEl) exEl.textContent = '正在透過字典 API 抓取真實例句...';
+async function fetchDictionaryInfo(wordObj) {
+  if (!wordObj || !wordObj.term) return;
+  const needsExample = !wordObj.example;
+  const needsAudio = !wordObj.audio_url;
+  if (!needsExample && !needsAudio) return;
+
+  const termLower = wordObj.term_lower;
+  if (State.fetchingDictTerms.has(termLower)) return;
+  State.fetchingDictTerms.add(termLower);
 
   try {
     const res = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(wordObj.term)}`);
     if (!res.ok) throw new Error('No entry');
     const data = await res.json();
+
     let foundExample = '';
     let foundPhonetic = '';
+    let usAudio = '';
+    let anyAudio = '';
 
     if (Array.isArray(data)) {
       for (const entry of data) {
         if (!foundPhonetic && entry.phonetic) foundPhonetic = entry.phonetic;
-        for (const m of (entry.meanings || [])) {
-          for (const d of (m.definitions || [])) {
-            if (d.example) { foundExample = d.example; break; }
+
+        // 篩選音檔：優先美式 (-us.mp3)，其次任意 MP3
+        for (const p of (entry.phonetics || [])) {
+          if (!foundPhonetic && p.text) foundPhonetic = p.text;
+          const aUrl = normalizeAudioUrl(p.audio);
+          if (aUrl) {
+            if (!anyAudio) anyAudio = aUrl;
+            if (!usAudio && /[-_]us\.(mp3|ogg|wav)$/i.test(aUrl)) {
+              usAudio = aUrl;
+            }
           }
-          if (foundExample) break;
         }
-        if (foundExample) break;
+
+        // 篩選例句
+        if (!foundExample) {
+          for (const m of (entry.meanings || [])) {
+            for (const d of (m.definitions || [])) {
+              if (d.example) { foundExample = d.example; break; }
+            }
+            if (foundExample) break;
+          }
+        }
       }
     }
 
-    wordObj.example = foundExample || '（查無公開英文例句）';
-    if (!wordObj.phonetic && foundPhonetic) wordObj.phonetic = foundPhonetic;
-    await VocabDB.putOne(wordObj);
-    State.wordsMap.set(termLower, wordObj);
+    if (needsExample) {
+      wordObj.example = foundExample || '（查無公開英文例句）';
+    }
+    if (needsAudio) {
+      wordObj.audio_url = usAudio || anyAudio || '__NONE__';
+    }
+    if (!wordObj.phonetic && foundPhonetic) {
+      wordObj.phonetic = foundPhonetic;
+    }
+
+    // 寫入 IndexedDB 永久快取
+    if (State.wordsMap.has(termLower)) {
+      await VocabDB.putOne(wordObj);
+      State.wordsMap.set(termLower, wordObj);
+    }
   } catch (e) {
-    wordObj.example = '（目前無法取得例句）';
+    if (needsExample && !wordObj.example) wordObj.example = '（目前無法取得例句）';
+    if (needsAudio && !wordObj.audio_url) wordObj.audio_url = '__NONE__';
   } finally {
-    State.fetchingExampleFor = null;
+    State.fetchingDictTerms.delete(termLower);
     const cur = State.todayList[State.currentIndex];
     if (cur && cur.term_lower === termLower) {
-      renderFlashcard();
+      renderFlashcard(false);
     }
   }
 }
 
 // ============================================================
-// 9. UI 渲染函式
+// 10. UI 渲染函式
 // ============================================================
 function computeStreak() {
   const byDate = new Map();
@@ -1383,7 +1590,7 @@ function renderStats() {
   document.getElementById('statTotalLogs').textContent = State.logs.length.toLocaleString();
 }
 
-function renderFlashcard() {
+function renderFlashcard(triggerPrefetch = true) {
   document.getElementById('studyDateLabel').textContent = `${State.currentDate} 任務`;
   const list = State.todayList;
   const allDone = list.length > 0 && list.every(a => a.is_completed);
@@ -1416,8 +1623,14 @@ function renderFlashcard() {
     term_lower: current.term_lower,
     phonetic: '',
     meaning: '（本地詞庫中找不到此字釋義）',
-    example: ''
+    example: '',
+    audio_url: ''
   };
+
+  // 顯示單字卡時即刻在背景預抓真人 MP3 與例句，確保手機點擊發音時可同步播放
+  if (triggerPrefetch && (!word.audio_url || !word.example)) {
+    fetchDictionaryInfo(word);
+  }
 
   emptyEl.classList.add('hidden');
   contentEl.classList.remove('hidden');
@@ -1429,6 +1642,18 @@ function renderFlashcard() {
   document.getElementById('cardTerm').textContent = word.term;
   document.getElementById('cardPhonetic').textContent = word.phonetic || '';
   document.getElementById('cardMeaning').textContent = word.meaning || '（無釋義）';
+
+  // 發音來源標籤
+  const audioBadge = document.getElementById('cardAudioBadge');
+  if (word.audio_url && word.audio_url.startsWith('http')) {
+    audioBadge.textContent = '真人 MP3';
+    audioBadge.className = 'audio-badge';
+  } else if (word.audio_url === '__NONE__') {
+    audioBadge.textContent = '系統語音';
+    audioBadge.className = 'audio-badge tts';
+  } else {
+    audioBadge.className = 'audio-badge hidden';
+  }
 
   const revealHint = document.getElementById('cardRevealHint');
   const backEl = document.getElementById('cardBack');
@@ -1445,7 +1670,6 @@ function renderFlashcard() {
     } else {
       exEl.textContent = '正在透過字典 API 抓取真實例句...';
       btnSpeakEx.classList.add('hidden');
-      fetchExampleIfMissing(word);
     }
   } else {
     revealHint.classList.remove('hidden');
@@ -1576,7 +1800,6 @@ function renderCalendarDetail() {
 }
 
 function renderMistakesAndLogs() {
-  // Mistakes aggregation
   const stats = new Map();
   for (const l of State.logs) {
     if (!stats.has(l.term_lower)) stats.set(l.term_lower, { forgot: 0, total: 0 });
@@ -1595,20 +1818,20 @@ function renderMistakesAndLogs() {
   } else {
     mBody.innerHTML = ranked.map(([termLower, s]) => {
       const w = State.wordsMap.get(termLower);
+      const term = w ? w.term : termLower;
       const rate = Math.round((s.forgot / s.total) * 100);
       return `
         <tr>
-          <td><strong>${w ? w.term : termLower}</strong></td>
+          <td><strong>${term}</strong></td>
           <td>${w ? w.meaning : ''}</td>
           <td>${s.forgot} / ${s.total}</td>
           <td><span class="tag tag-err">${rate}%</span></td>
-          <td><button class="btn-outline btn-sm" onclick="speakText('${(w ? w.term : termLower).replace(/'/g, "\\'")}')">🔊</button></td>
+          <td><button class="btn-outline btn-sm" onclick="speakWordByTerm('${term.replace(/'/g, "\\'")}')">🔊</button></td>
         </tr>
       `;
     }).join('');
   }
 
-  // Logs table
   const filtered = State.logsFilter === 'all'
     ? State.logs
     : State.logs.filter(l => l.result === State.logsFilter);
@@ -1663,7 +1886,7 @@ function renderVocabTable() {
         <td style="color:var(--text-muted); font-size:13px;">${w.phonetic || ''}</td>
         <td>${w.meaning || ''}</td>
         <td>${studied.has(w.term_lower) ? '<span class="tag tag-ok">已背過</span>' : '<span style="font-size:12px; color:var(--text-muted);">未背誦</span>'}</td>
-        <td><button class="btn-outline btn-sm" onclick="speakText('${w.term.replace(/'/g, "\\'")}')">🔊</button></td>
+        <td><button class="btn-outline btn-sm" onclick="speakWordByTerm('${w.term.replace(/'/g, "\\'")}')">🔊</button></td>
       </tr>
     `).join('');
   }
@@ -1684,12 +1907,13 @@ function renderAll() {
 }
 
 // ============================================================
-// 10. 作答處理與啟動流程
+// 11. 作答處理與啟動流程
 // ============================================================
 async function submitAnswer(result) {
   const current = State.todayList[State.currentIndex];
   if (!current || current.is_completed) return;
 
+  AudioEngine.stopAll();
   const spent = Date.now() - State.cardStartTime;
   try {
     await DataLayer.recordStudyResult(current, result, spent);
@@ -1745,10 +1969,9 @@ function initSupabaseClient() {
 }
 
 // ============================================================
-// 11. 事件綁定（優先綁定確保所有按鈕皆可正常回應）
+// 12. 事件綁定
 // ============================================================
 function bindEvents() {
-  // Auth screen
   document.getElementById('btnToggleConfig').addEventListener('click', () => {
     document.getElementById('authConfigBox').classList.toggle('hidden');
   });
@@ -1794,6 +2017,7 @@ function bindEvents() {
   });
 
   document.getElementById('btnLogout').addEventListener('click', async () => {
+    AudioEngine.stopAll();
     if (State.mode === 'cloud' && State.supabase) {
       await State.supabase.auth.signOut();
     }
@@ -1837,14 +2061,14 @@ function bindEvents() {
     const cur = State.todayList[State.currentIndex];
     if (!cur || cur.is_completed) return;
     State.cardFlipped = !State.cardFlipped;
-    renderFlashcard();
+    renderFlashcard(false);
   });
 
   document.getElementById('btnSpeakWord').addEventListener('click', () => {
     const cur = State.todayList[State.currentIndex];
     if (!cur) return;
-    const w = State.wordsMap.get(cur.term_lower);
-    speakText(w ? w.term : cur.term_lower);
+    const w = State.wordsMap.get(cur.term_lower) || cur.term_lower;
+    AudioEngine.speakWord(w);
   });
 
   document.getElementById('btnSpeakExample').addEventListener('click', (e) => {
@@ -1852,7 +2076,10 @@ function bindEvents() {
     const cur = State.todayList[State.currentIndex];
     if (!cur) return;
     const w = State.wordsMap.get(cur.term_lower);
-    if (w && w.example && !w.example.startsWith('（')) speakText(w.example);
+    if (w && w.example && !w.example.startsWith('（')) {
+      AudioEngine.stopAll();
+      AudioEngine.speakTTS(w.example);
+    }
   });
 
   document.getElementById('btnRemember').addEventListener('click', () => submitAnswer('remembered'));
@@ -1873,7 +2100,7 @@ function bindEvents() {
       const cur = State.todayList[State.currentIndex];
       if (cur && !cur.is_completed) {
         State.cardFlipped = !State.cardFlipped;
-        renderFlashcard();
+        renderFlashcard(false);
       }
     } else if (e.key === 's' || e.key === 'S') {
       document.getElementById('btnSpeakWord').click();
@@ -1974,9 +2201,10 @@ function bindEvents() {
 }
 
 // ============================================================
-// 12. 頁面初始化
+// 13. 頁面初始化
 // ============================================================
 document.addEventListener('DOMContentLoaded', async () => {
+  AudioEngine.init();
   bindEvents();
   try {
     const client = initSupabaseClient();
