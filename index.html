@@ -1,0 +1,2884 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Daily10 — 每日 10 單字背誦與紀錄（1萬字雲端同步版）</title>
+  <!-- 透過 CDN 引入 Supabase JS v2 -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    /* ============================================================
+       全域設計系統（純原生 CSS，響應式卡片排版）
+    ============================================================ */
+    :root {
+      --bg-page: #f8fafc;
+      --bg-surface: #ffffff;
+      --bg-subtle: #f1f5f9;
+      --bg-hover: #f8fafc;
+      --border: #e2e8f0;
+      --border-strong: #cbd5e1;
+
+      --text-primary: #0f172a;
+      --text-secondary: #475569;
+      --text-muted: #94a3b8;
+
+      --brand-900: #1e3a8a;
+      --brand-800: #1e40af;
+      --brand-700: #1d4ed8;
+      --brand-600: #2563eb;
+      --brand-100: #dbeafe;
+      --brand-50: #eff6ff;
+
+      --emerald-700: #047857;
+      --emerald-600: #059669;
+      --emerald-100: #d1fae5;
+      --emerald-50: #ecfdf5;
+
+      --rose-700: #be123c;
+      --rose-600: #e11d48;
+      --rose-200: #fecdd3;
+      --rose-100: #ffe4e6;
+      --rose-50: #fff1f2;
+
+      --amber-800: #92400e;
+      --amber-600: #d97706;
+      --amber-200: #fde68a;
+      --amber-100: #fef3c7;
+      --amber-50: #fffbeb;
+
+      --radius-sm: 8px;
+      --radius-md: 12px;
+      --radius-lg: 16px;
+      --radius-full: 9999px;
+
+      --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.05);
+      --shadow-md: 0 4px 14px rgba(15, 23, 42, 0.08);
+      --shadow-lg: 0 14px 36px rgba(15, 23, 42, 0.14);
+
+      --font-sans: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang TC", "Microsoft JhengHei", "Noto Sans TC", sans-serif;
+      --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      font-family: var(--font-sans);
+      background-color: var(--bg-page);
+      color: var(--text-primary);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    button, input, select { font-family: inherit; font-size: inherit; color: inherit; }
+    button { cursor: pointer; border: none; background: none; }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    h1, h2, h3, h4, p { margin: 0; }
+    ul { margin: 0; padding: 0; list-style: none; }
+    code {
+      font-family: var(--font-mono);
+      background: var(--bg-subtle);
+      padding: 2px 6px;
+      border-radius: 6px;
+      font-size: 0.85em;
+      color: var(--brand-900);
+    }
+
+    .container { width: 100%; max-width: 1180px; margin: 0 auto; padding: 0 16px; }
+    .hidden { display: none !important; }
+    .fade-in { animation: fadeIn 0.2s ease-out forwards; }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* ============================================================
+       入口登入畫面
+    ============================================================ */
+    .auth-shell {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px 16px;
+      background: radial-gradient(circle at top right, #dbeafe 0%, #f8fafc 45%, #eef2ff 100%);
+    }
+
+    .auth-card {
+      width: 100%;
+      max-width: 480px;
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-lg);
+      overflow: hidden;
+    }
+
+    .auth-header {
+      padding: 24px;
+      border-bottom: 1px solid var(--border);
+      background: #f8fafc;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .auth-body { padding: 24px; }
+
+    .google-btn {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      padding: 13px 18px;
+      border-radius: var(--radius-md);
+      background: #ffffff;
+      color: #1f2937;
+      border: 1px solid var(--border-strong);
+      font-size: 15px;
+      font-weight: 700;
+      box-shadow: var(--shadow-sm);
+      transition: background-color 0.15s, box-shadow 0.15s, transform 0.1s;
+    }
+    .google-btn:hover:not(:disabled) {
+      background: #f8fafc;
+      box-shadow: var(--shadow-md);
+    }
+    .google-btn:active:not(:disabled) { transform: scale(0.99); }
+
+    .divider-text {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin: 18px 0;
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+    .divider-text::before, .divider-text::after {
+      content: "";
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+    }
+
+    .alert-box {
+      padding: 11px 14px;
+      border-radius: var(--radius-sm);
+      font-size: 13px;
+      margin-bottom: 14px;
+      line-height: 1.5;
+    }
+    .alert-danger { background: var(--rose-50); border: 1px solid var(--rose-200); color: var(--rose-700); }
+    .alert-success { background: var(--emerald-50); border: 1px solid #a7f3d0; color: var(--emerald-700); }
+    .alert-info { background: var(--brand-50); border: 1px solid var(--brand-100); color: var(--brand-900); }
+
+    /* ============================================================
+       頂部常駐資訊列與導覽列
+    ============================================================ */
+    .app-header {
+      background: var(--bg-surface);
+      border-bottom: 1px solid var(--border);
+      position: sticky;
+      top: 0;
+      z-index: 30;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .header-top {
+      padding: 12px 0;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .brand-group { display: flex; align-items: center; gap: 10px; }
+    .brand-logo {
+      width: 38px;
+      height: 38px;
+      border-radius: var(--radius-md);
+      background: linear-gradient(135deg, var(--brand-900), var(--brand-600));
+      color: #ffffff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      font-size: 15px;
+      flex-shrink: 0;
+    }
+    .brand-title { font-size: 16px; font-weight: 700; letter-spacing: -0.01em; }
+    .brand-sub { font-size: 12px; color: var(--text-secondary); }
+
+    .header-right {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .metric-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 5px 10px;
+      border-radius: var(--radius-full);
+      font-size: 12px;
+      font-weight: 600;
+      border: 1px solid var(--border);
+      background: var(--bg-surface);
+      color: var(--text-secondary);
+      white-space: nowrap;
+    }
+    .metric-pill.brand { background: var(--brand-50); border-color: var(--brand-100); color: var(--brand-900); }
+    .metric-pill.amber { background: var(--amber-50); border-color: var(--amber-200); color: var(--amber-800); }
+    .metric-pill.emerald { background: var(--emerald-50); border-color: #a7f3d0; color: var(--emerald-700); }
+
+    .account-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 4px 10px 4px 6px;
+      border-radius: var(--radius-full);
+      background: var(--bg-subtle);
+      border: 1px solid var(--border);
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+    .user-avatar {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      object-fit: cover;
+      background: var(--brand-100);
+      color: var(--brand-900);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      font-weight: 800;
+      flex-shrink: 0;
+    }
+
+    .tab-nav {
+      display: flex;
+      gap: 4px;
+      overflow-x: auto;
+      scrollbar-width: none;
+      margin-bottom: -1px;
+    }
+    .tab-nav::-webkit-scrollbar { display: none; }
+
+    .tab-btn {
+      white-space: nowrap;
+      padding: 10px 16px;
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--text-secondary);
+      border-bottom: 2px solid transparent;
+      transition: color 0.15s, border-color 0.15s, background-color 0.15s;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .tab-btn:hover { color: var(--text-primary); background: var(--bg-hover); }
+    .tab-btn.active { color: var(--brand-900); font-weight: 700; border-bottom-color: var(--brand-900); }
+
+    .tab-badge {
+      font-size: 11px;
+      font-weight: 700;
+      padding: 1px 7px;
+      border-radius: var(--radius-full);
+      background: var(--bg-subtle);
+      color: var(--text-secondary);
+    }
+    .tab-btn.active .tab-badge { background: var(--brand-100); color: var(--brand-900); }
+
+    /* ============================================================
+       通用元件
+    ============================================================ */
+    main.app-main { flex: 1; padding: 22px 0 40px; }
+
+    .card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-sm);
+      overflow: hidden;
+    }
+
+    .card-header {
+      padding: 14px 20px;
+      background: #f8fafc;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+    .card-body { padding: 20px; }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: 8px 14px;
+      border-radius: var(--radius-sm);
+      font-size: 13px;
+      font-weight: 600;
+      transition: background-color 0.15s, border-color 0.15s, transform 0.1s;
+      white-space: nowrap;
+    }
+    .btn:active:not(:disabled) { transform: scale(0.98); }
+
+    .btn-primary { background: var(--brand-900); color: #ffffff; box-shadow: var(--shadow-sm); }
+    .btn-primary:hover:not(:disabled) { background: var(--brand-800); }
+    .btn-secondary { background: var(--bg-surface); color: var(--text-primary); border: 1px solid var(--border-strong); }
+    .btn-secondary:hover:not(:disabled) { background: var(--bg-subtle); }
+    .btn-subtle { background: var(--bg-subtle); color: var(--text-primary); }
+    .btn-subtle:hover:not(:disabled) { background: var(--border); }
+    .btn-success { background: var(--emerald-600); color: #ffffff; box-shadow: var(--shadow-sm); }
+    .btn-success:hover:not(:disabled) { background: var(--emerald-700); }
+    .btn-danger { background: var(--rose-600); color: #ffffff; }
+    .btn-danger:hover:not(:disabled) { background: var(--rose-700); }
+    .btn-danger-outline { background: var(--bg-surface); color: var(--rose-700); border: 1px solid var(--rose-200); }
+    .btn-danger-outline:hover:not(:disabled) { background: var(--rose-50); border-color: var(--rose-600); }
+
+    .btn-sm { padding: 6px 10px; font-size: 12px; }
+    .btn-lg { padding: 13px 18px; font-size: 15px; border-radius: var(--radius-md); }
+    .btn-full { width: 100%; }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 2px 9px;
+      border-radius: var(--radius-full);
+      font-size: 12px;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    .badge-new { background: var(--bg-subtle); color: var(--text-secondary); }
+    .badge-remembered { background: var(--emerald-100); color: var(--emerald-700); }
+    .badge-forgot { background: var(--rose-100); color: var(--rose-700); }
+    .badge-brand { background: var(--brand-100); color: var(--brand-900); }
+
+    .form-group { margin-bottom: 14px; }
+    .form-label { display: block; font-size: 12px; font-weight: 700; color: var(--text-secondary); margin-bottom: 5px; }
+
+    .input-control, .select-control {
+      width: 100%;
+      padding: 9px 12px;
+      font-size: 14px;
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius-sm);
+      background: var(--bg-surface);
+      outline: none;
+      transition: border-color 0.15s, box-shadow 0.15s;
+    }
+    .input-control:focus, .select-control:focus {
+      border-color: var(--brand-700);
+      box-shadow: 0 0 0 3px var(--brand-100);
+    }
+
+    .date-input {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius-sm);
+      padding: 6px 9px;
+      font-size: 13px;
+      font-weight: 600;
+      outline: none;
+    }
+
+    .progress-track {
+      width: 100%;
+      height: 10px;
+      background: var(--bg-subtle);
+      border-radius: var(--radius-full);
+      overflow: hidden;
+    }
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--brand-800), var(--brand-600));
+      border-radius: var(--radius-full);
+      transition: width 0.25s ease;
+    }
+    .progress-fill.emerald { background: linear-gradient(90deg, var(--emerald-700), var(--emerald-600)); }
+
+    .grid { display: grid; gap: 20px; }
+    .grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .grid-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .grid-12 { grid-template-columns: repeat(12, minmax(0, 1fr)); }
+    .col-5 { grid-column: span 5; }
+    .col-7 { grid-column: span 7; }
+
+    /* ============================================================
+       分頁 1：今日背誦
+    ============================================================ */
+    .date-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+    .sim-date-bar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px;
+      background: var(--bg-subtle);
+      border: 1px solid var(--border);
+      padding: 5px 8px;
+      border-radius: var(--radius-md);
+    }
+
+    .study-count-big { font-size: 26px; font-weight: 800; color: var(--brand-900); }
+
+    .complete-banner {
+      background: var(--emerald-50);
+      border: 1px solid #a7f3d0;
+      border-radius: var(--radius-lg);
+      padding: 14px 18px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    .complete-icon {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background: var(--emerald-100);
+      color: var(--emerald-700);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      flex-shrink: 0;
+    }
+
+    .flashcard-body {
+      padding: 34px 24px;
+      min-height: 290px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      text-align: center;
+      cursor: pointer;
+      user-select: none;
+    }
+    .flashcard-phonetic { font-family: var(--font-mono); font-size: 15px; color: var(--text-secondary); margin-bottom: 6px; }
+    .flashcard-term-row { display: flex; align-items: center; justify-content: center; gap: 12px; flex-wrap: wrap; }
+    .flashcard-term { font-size: 38px; font-weight: 800; letter-spacing: -0.02em; word-break: break-word; }
+
+    .speak-btn {
+      width: 42px;
+      height: 42px;
+      border-radius: 50%;
+      background: var(--brand-50);
+      color: var(--brand-800);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      transition: background-color 0.15s;
+    }
+    .speak-btn:hover { background: var(--brand-100); }
+
+    .flashcard-answer {
+      width: 100%;
+      margin-top: 22px;
+      padding-top: 20px;
+      border-top: 1px solid var(--border);
+    }
+    .flashcard-meaning { font-size: 20px; font-weight: 700; color: var(--brand-900); margin-bottom: 14px; }
+    .example-box {
+      background: var(--bg-page);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 14px 16px;
+      text-align: left;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 10px;
+    }
+    .example-en { font-size: 15px; font-weight: 500; color: var(--text-primary); }
+    .example-status { font-size: 13px; color: var(--text-muted); font-style: italic; }
+
+    .flashcard-actions {
+      padding: 16px 20px;
+      background: #f8fafc;
+      border-top: 1px solid var(--border);
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .shortcut-hint { text-align: center; font-size: 12px; color: var(--text-muted); margin-top: 10px; }
+    kbd {
+      display: inline-block;
+      padding: 1px 6px;
+      font-size: 11px;
+      font-family: var(--font-mono);
+      background: var(--bg-surface);
+      border: 1px solid var(--border-strong);
+      border-radius: 5px;
+      color: var(--text-secondary);
+    }
+
+    .today-list-item {
+      width: 100%;
+      text-align: left;
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      border-bottom: 1px solid var(--border);
+      border-left: 4px solid transparent;
+      cursor: pointer;
+      transition: background-color 0.15s;
+    }
+    .today-list-item:last-child { border-bottom: none; }
+    .today-list-item:hover { background: var(--bg-hover); }
+    .today-list-item.current { background: var(--brand-50); border-left-color: var(--brand-900); }
+
+    .today-idx-circle {
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      font-weight: 700;
+      flex-shrink: 0;
+      background: var(--bg-subtle);
+      color: var(--text-secondary);
+    }
+    .today-idx-circle.ok { background: var(--emerald-100); color: var(--emerald-700); }
+    .today-idx-circle.err { background: var(--rose-100); color: var(--rose-700); }
+
+    /* ============================================================
+       分頁 2：日曆回顧
+    ============================================================ */
+    .stat-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 16px 18px;
+      box-shadow: var(--shadow-sm);
+    }
+    .stat-label { font-size: 12px; color: var(--text-secondary); font-weight: 500; }
+    .stat-value { font-size: 26px; font-weight: 800; margin-top: 4px; color: var(--text-primary); }
+
+    .calendar-weekdays, .calendar-grid {
+      display: grid;
+      grid-template-columns: repeat(7, minmax(0, 1fr));
+      gap: 6px;
+      text-align: center;
+    }
+    .calendar-weekdays { font-size: 12px; font-weight: 600; color: var(--text-muted); margin-bottom: 8px; }
+
+    .cal-day {
+      height: 48px;
+      border-radius: var(--radius-sm);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-primary);
+      border: 1px solid transparent;
+      transition: background-color 0.15s;
+    }
+    .cal-day:hover { background: var(--bg-subtle); }
+    .cal-day.done { background: var(--emerald-50); color: var(--emerald-700); font-weight: 700; }
+    .cal-day.partial { background: var(--amber-50); color: var(--amber-800); font-weight: 700; }
+    .cal-day.assigned { background: var(--brand-50); color: var(--brand-900); }
+    .cal-day.selected { border-color: var(--brand-900); box-shadow: 0 0 0 2px var(--brand-100); }
+    .cal-day.sim-today { border-style: dashed; border-color: var(--brand-600); }
+    .cal-sub { font-size: 10px; font-weight: 700; opacity: 0.85; margin-top: 1px; }
+
+    /* ============================================================
+       資料表格與分頁器
+    ============================================================ */
+    .table-wrap { width: 100%; overflow-x: auto; }
+    table.data-table { width: 100%; border-collapse: collapse; text-align: left; font-size: 13.5px; }
+    .data-table th {
+      background: #f8fafc;
+      color: var(--text-secondary);
+      font-size: 12px;
+      font-weight: 700;
+      padding: 11px 14px;
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+    }
+    .data-table td { padding: 12px 14px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+    .data-table tbody tr:hover { background: #f8fafc; }
+    .data-table tbody tr:last-child td { border-bottom: none; }
+
+    .pagination-bar {
+      padding: 12px 18px;
+      background: #f8fafc;
+      border-top: 1px solid var(--border);
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      font-size: 13px;
+      color: var(--text-secondary);
+    }
+    .pagination-controls { display: flex; align-items: center; gap: 6px; }
+
+    /* ============================================================
+       Modal、載入遮罩與 Toast
+    ============================================================ */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.55);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      z-index: 50;
+    }
+    .modal-dialog {
+      background: var(--bg-surface);
+      border-radius: var(--radius-lg);
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow-lg);
+      width: 100%;
+      max-width: 440px;
+      overflow: hidden;
+    }
+
+    .toast-container {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      z-index: 60;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      pointer-events: none;
+    }
+    .toast {
+      padding: 10px 16px;
+      border-radius: var(--radius-md);
+      color: #ffffff;
+      font-size: 13px;
+      font-weight: 600;
+      box-shadow: var(--shadow-lg);
+      background: #0f172a;
+      pointer-events: auto;
+      max-width: 360px;
+    }
+    .toast.success { background: var(--emerald-700); }
+    .toast.warning { background: var(--amber-800); }
+    .toast.danger { background: var(--rose-700); }
+
+    .app-footer {
+      background: var(--bg-surface);
+      border-top: 1px solid var(--border);
+      padding: 14px 0;
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+    .footer-inner { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; }
+
+    @media (max-width: 960px) {
+      .grid-12 { grid-template-columns: 1fr; }
+      .col-5, .col-7 { grid-column: span 1; }
+      .grid-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+    @media (max-width: 600px) {
+      .grid-2 { grid-template-columns: 1fr; }
+      .flashcard-term { font-size: 30px; }
+      .flashcard-actions { grid-template-columns: 1fr; }
+      .header-top { flex-direction: column; align-items: stretch; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ============================================================
+       畫面 A：入口與 Google 帳號登入畫面
+  ============================================================ -->
+  <div id="entryView" class="auth-shell">
+    <div class="auth-card fade-in">
+      <div class="auth-header">
+        <div class="brand-logo">10</div>
+        <div>
+          <h1 class="brand-title">Daily10 單字背誦與紀錄</h1>
+          <p class="brand-sub">10,000 常用字詞庫・Google 帳號雲端同步</p>
+        </div>
+      </div>
+
+      <div class="auth-body">
+        <div id="entryAlert" class="alert-box alert-danger hidden"></div>
+
+        <!-- Google OAuth 登入按鈕 -->
+        <button id="btnGoogleLogin" type="button" class="google-btn">
+          <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true">
+            <path fill="#4285F4" d="M23.745 12.27c0-.79-.07-1.54-.19-2.27h-11.3v4.51h6.47c-.29 1.48-1.14 2.73-2.4 3.58v3h3.86c2.26-2.09 3.56-5.17 3.56-8.82z"/>
+            <path fill="#34A853" d="M12.255 24c3.24 0 5.95-1.08 7.93-2.91l-3.86-3c-1.08.72-2.45 1.16-4.07 1.16-3.13 0-5.78-2.11-6.73-4.96h-3.98v3.09C3.515 21.3 7.565 24 12.255 24z"/>
+            <path fill="#FBBC05" d="M5.525 14.29c-.25-.72-.38-1.49-.38-2.29s.14-1.57.38-2.29V6.62h-3.98a11.86 11.86 0 000 10.76l3.98-3.09z"/>
+            <path fill="#EA4335" d="M12.255 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C18.205 1.19 15.495 0 12.255 0c-4.69 0-8.74 2.7-10.71 6.62l3.98 3.09c.95-2.85 3.6-4.96 6.73-4.96z"/>
+          </svg>
+          使用 Google 帳號登入
+        </button>
+
+        <div class="divider-text">或先免登入體驗</div>
+
+        <!-- 本機體驗模式按鈕 -->
+        <button id="btnEnterDemo" type="button" class="btn btn-secondary btn-full btn-lg">
+          🚀 免登入本機體驗模式（Demo Mode）
+        </button>
+
+        <!-- Supabase 連線設定（若常數尚未填入時展開） -->
+        <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border);">
+          <button id="btnToggleEntryConfig" type="button" class="btn btn-subtle btn-sm btn-full">
+            ⚙ 設定 Supabase URL 與 Anon Key
+          </button>
+          <form id="entryConfigForm" class="hidden" style="margin-top:14px;">
+            <div class="form-group">
+              <label class="form-label" for="entryUrlInput">Supabase Project URL</label>
+              <input type="url" id="entryUrlInput" class="input-control" required placeholder="https://xxxxxxxxxxxx.supabase.co">
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="entryKeyInput">Supabase Anon Public Key</label>
+              <input type="text" id="entryKeyInput" class="input-control" required placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...">
+            </div>
+            <button type="submit" class="btn btn-primary btn-full">儲存連線設定</button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================
+       詞庫首次載入進度遮罩（分塊寫入 IndexedDB 時顯示）
+  ============================================================ -->
+  <div id="vocabLoadingOverlay" class="modal-backdrop hidden" style="z-index:55;">
+    <div class="modal-dialog fade-in" style="padding:24px;">
+      <h3 style="font-size:16px;font-weight:700;margin-bottom:6px;">正在初始化 10,000 字詞庫</h3>
+      <p id="vocabLoadingText" style="font-size:13px;color:var(--text-secondary);margin-bottom:14px;">正在下載 vocab_10k.json...</p>
+      <div class="progress-track">
+        <div id="vocabLoadingBar" class="progress-fill emerald" style="width:0%"></div>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text-muted);margin-top:8px;">
+        <span>寫入瀏覽器本地 IndexedDB 快取</span>
+        <span id="vocabLoadingPct">0%</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================
+       畫面 B：主應用程式
+  ============================================================ -->
+  <div id="appShell" class="hidden" style="min-height:100vh;display:flex;flex-direction:column;">
+    <header class="app-header">
+      <div class="container">
+        <div class="header-top">
+          <div class="brand-group">
+            <div class="brand-logo">10</div>
+            <div>
+              <h1 class="brand-title">Daily10 單字背誦與紀錄</h1>
+              <p class="brand-sub" id="headerModeSubtitle">Supabase 雲端同步・10,000 字詞庫</p>
+            </div>
+          </div>
+
+          <div class="header-right">
+            <span class="metric-pill brand" id="headerProgressPill">今日 0/10</span>
+            <span class="metric-pill amber" id="headerStreakPill">🔥 連續 0 天</span>
+            <span class="metric-pill emerald" id="headerStudiedPill">已背 0 字</span>
+            <span class="account-pill" title="目前登入帳號">
+              <span id="headerAvatarWrap"></span>
+              <span id="headerUserEmail">載入中...</span>
+            </span>
+            <button id="btnLogout" type="button" class="btn btn-secondary btn-sm">登出</button>
+          </div>
+        </div>
+
+        <!-- 四大功能分頁導覽列 -->
+        <nav class="tab-nav" aria-label="主功能分頁">
+          <button data-tab="study" class="tab-btn active" type="button">
+            今日背誦 <span class="tab-badge" id="tabBadgeProgress">0/10</span>
+          </button>
+          <button data-tab="calendar" class="tab-btn" type="button">
+            日曆回顧
+          </button>
+          <button data-tab="records" class="tab-btn" type="button">
+            錯題與日誌
+          </button>
+          <button data-tab="settings" class="tab-btn" type="button">
+            詞庫與設定 <span class="tab-badge" id="tabBadgeWords">0</span>
+          </button>
+        </nav>
+      </div>
+    </header>
+
+    <main class="app-main">
+      <div class="container">
+        <div id="globalErrorBanner" class="alert-box alert-danger hidden" style="margin-bottom:18px;"></div>
+
+        <!-- ========================================================
+             分頁一：今日背誦
+        ========================================================= -->
+        <section id="panel-study" class="tab-panel fade-in">
+          <div class="card" style="padding:18px 20px;margin-bottom:20px;">
+            <div class="date-toolbar">
+              <div>
+                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                  <h2 style="font-size:18px;font-weight:700;"><span id="studyDateHeading">----/--/--</span> 每日 10 字任務</h2>
+                  <span id="studyStatusBadge" class="badge badge-brand">進行中</span>
+                </div>
+                <p style="font-size:12px;color:var(--text-secondary);margin-top:3px;">
+                  自動排除曾出現在 <code>study_logs</code> 的單字；缺少例句時自動透過 Free Dictionary API 補齊並快取。
+                </p>
+              </div>
+
+              <div class="sim-date-bar">
+                <span style="font-size:12px;font-weight:600;color:var(--text-secondary);">學習日期</span>
+                <input type="date" id="simDateInput" class="date-input" aria-label="學習日期選擇器">
+                <button id="btnNextDay" type="button" class="btn btn-primary btn-sm">模擬進入下一天 →</button>
+                <button id="btnToday" type="button" class="btn btn-secondary btn-sm">今日</button>
+              </div>
+            </div>
+
+            <div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px;">
+              <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+                <span style="font-size:12px;color:var(--text-secondary);font-weight:600;">當日進度</span>
+                <button id="btnRerollUnfinished" type="button" class="btn btn-secondary btn-sm">
+                  🔄 一鍵重選未完成清單
+                </button>
+              </div>
+              <div>
+                <span id="studyCompletedNum" class="study-count-big">0</span>
+                <span style="font-size:14px;color:var(--text-muted);font-weight:600;"> / <span id="studyQuotaNum">10</span> 完成</span>
+              </div>
+            </div>
+            <div class="progress-track">
+              <div id="studyProgressBar" class="progress-fill" style="width:0%"></div>
+            </div>
+
+            <div id="insufficientWordsBanner" class="alert-box alert-info hidden" style="margin-top:12px;margin-bottom:0;"></div>
+          </div>
+
+          <div class="grid grid-12" style="align-items:start;">
+            <!-- 左側：互動字卡 -->
+            <div class="col-7">
+              <div id="dailyCompleteBanner" class="complete-banner hidden">
+                <div class="complete-icon">✓</div>
+                <div>
+                  <h3 style="font-size:14px;font-weight:700;color:var(--emerald-700);">太棒了！今日單字已全數完成並同步紀錄</h3>
+                  <p style="font-size:12px;color:var(--emerald-700);margin-top:2px;">你可以點選右側清單再次複習，或點擊「模擬進入下一天」測試隔日派發。</p>
+                </div>
+              </div>
+
+              <div class="card">
+                <div class="card-header">
+                  <span id="cardIndexBadge" class="badge badge-brand">第 1 / 10 字</span>
+                  <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                    <span id="cardTodayResultLabel" style="font-size:12px;color:var(--text-muted);font-weight:600;">今日尚未作答</span>
+                    <button id="btnRerollCurrentWord" type="button" class="btn btn-secondary btn-sm">🔄 重選此字</button>
+                  </div>
+                </div>
+
+                <!-- 字卡點擊翻面主體 -->
+                <div id="flashcardBody" class="flashcard-body" role="button" tabindex="0" aria-label="點擊翻面顯示釋義與例句">
+                  <div id="cardPhonetic" class="flashcard-phonetic"></div>
+                  <div class="flashcard-term-row">
+                    <h3 id="cardTerm" class="flashcard-term">載入中...</h3>
+                    <button id="btnSpeakWord" type="button" class="speak-btn" title="朗讀單字 [S]" aria-label="朗讀單字">🔊</button>
+                  </div>
+
+                  <div id="cardRevealPrompt" style="margin-top:28px;">
+                    <button id="btnRevealAnswer" type="button" class="btn btn-subtle">點擊字卡或按 Space 顯示釋義與例句</button>
+                  </div>
+
+                  <div id="cardAnswerArea" class="flashcard-answer hidden">
+                    <div id="cardMeaning" class="flashcard-meaning"></div>
+                    <div class="example-box">
+                      <div style="flex:1;min-width:0;">
+                        <div style="font-size:11px;font-weight:700;color:var(--text-muted);margin-bottom:4px;">英文例句</div>
+                        <div id="cardExample" class="example-en"></div>
+                      </div>
+                      <button id="btnSpeakExample" type="button" class="btn btn-subtle btn-sm" title="朗讀例句" aria-label="朗讀例句">🔊</button>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="flashcard-actions">
+                  <button id="btnRemembered" type="button" class="btn btn-success btn-lg">✓ 記住了 (1)</button>
+                  <button id="btnForgot" type="button" class="btn btn-danger-outline btn-lg">✕ 忘記了 (2)</button>
+                </div>
+              </div>
+
+              <p class="shortcut-hint">
+                快捷鍵：<kbd>Space</kbd> 翻面・<kbd>S</kbd> 發音・<kbd>1</kbd> 記住了・<kbd>2</kbd> 忘記了
+              </p>
+            </div>
+
+            <!-- 右側：今日 10 字總覽清單 -->
+            <div class="col-5">
+              <div class="card">
+                <div class="card-header">
+                  <h3 style="font-size:14px;font-weight:700;">今日派發清單（總覽）</h3>
+                  <span style="font-size:12px;color:var(--text-secondary);">點擊跳轉・未作答可換字</span>
+                </div>
+                <ul id="todayWordList" style="max-height:520px;overflow-y:auto;"></ul>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ========================================================
+             分頁二：日曆回顧
+        ========================================================= -->
+        <section id="panel-calendar" class="tab-panel hidden fade-in">
+          <div class="grid grid-4" style="margin-bottom:20px;">
+            <div class="stat-card">
+              <div class="stat-label">連續達標天數（Streak）</div>
+              <div class="stat-value" style="color:var(--amber-600);" id="calStatStreak">0 天</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">累計派發天數</div>
+              <div class="stat-value" style="color:var(--brand-900);" id="calStatDays">0 天</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">總背誦次數（study_logs）</div>
+              <div class="stat-value" id="calStatLogs">0 次</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">整體記憶正確率</div>
+              <div class="stat-value" style="color:var(--emerald-600);" id="calStatAccuracy">0%</div>
+            </div>
+          </div>
+
+          <div class="grid grid-12" style="align-items:start;">
+            <div class="col-5">
+              <div class="card">
+                <div class="card-header">
+                  <button id="btnPrevMonth" type="button" class="btn btn-secondary btn-sm">←</button>
+                  <h3 id="calendarMonthLabel" style="font-size:15px;font-weight:700;">---- 年 -- 月</h3>
+                  <button id="btnNextMonth" type="button" class="btn btn-secondary btn-sm">→</button>
+                </div>
+                <div class="card-body">
+                  <div class="calendar-weekdays">
+                    <div>日</div><div>一</div><div>二</div><div>三</div><div>四</div><div>五</div><div>六</div>
+                  </div>
+                  <div id="calendarGrid" class="calendar-grid"></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="col-7">
+              <div class="card" style="margin-bottom:20px;">
+                <div class="card-header">
+                  <div>
+                    <h3 style="font-size:15px;font-weight:700;"><span id="calDetailDateTitle">請選擇日期</span> 派發單字</h3>
+                    <p id="calDetailSummary" style="font-size:12px;color:var(--text-secondary);margin-top:2px;">點選左側月曆日期檢視當日進度</p>
+                  </div>
+                  <button id="btnSwitchToCalDate" type="button" class="btn btn-primary btn-sm hidden">切換至該日背誦</button>
+                </div>
+                <div id="calDetailWordList">
+                  <div style="padding:32px;text-align:center;color:var(--text-muted);font-size:13px;">請點選左側日期</div>
+                </div>
+              </div>
+
+              <div class="card">
+                <div class="card-header">
+                  <h3 style="font-size:14px;font-weight:700;">當日答題明細（study_logs）</h3>
+                  <span id="calDayLogsCount" class="badge badge-new">0 筆</span>
+                </div>
+                <div class="table-wrap">
+                  <table class="data-table">
+                    <thead>
+                      <tr>
+                        <th>時間</th>
+                        <th>單字</th>
+                        <th>耗時</th>
+                        <th style="text-align:right;">結果</th>
+                      </tr>
+                    </thead>
+                    <tbody id="calDayLogsTbody">
+                      <tr><td colspan="4" style="text-align:center;color:var(--text-muted);padding:24px;">該日尚無答題紀錄</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ========================================================
+             分頁三：錯題與日誌
+        ========================================================= -->
+        <section id="panel-records" class="tab-panel hidden fade-in">
+          <div class="grid grid-12" style="align-items:start;">
+            <div class="col-5">
+              <div class="card">
+                <div class="card-header" style="background:var(--rose-50);">
+                  <div>
+                    <h3 style="font-size:15px;font-weight:700;color:var(--rose-700);">高頻錯題排行</h3>
+                    <p style="font-size:12px;color:var(--rose-700);opacity:0.85;">依錯誤次數與錯誤率排序</p>
+                  </div>
+                  <span id="errorBookCountBadge" class="badge badge-forgot">0 字</span>
+                </div>
+                <div id="errorBookList" style="max-height:580px;overflow-y:auto;"></div>
+              </div>
+            </div>
+
+            <div class="col-7">
+              <div class="card">
+                <div class="card-header">
+                  <div>
+                    <h3 style="font-size:15px;font-weight:700;">背誦時間軸明細（study_logs）</h3>
+                    <p style="font-size:12px;color:var(--text-secondary);">每頁 50 筆，支援結果篩選</p>
+                  </div>
+                  <select id="logResultFilter" class="select-control" style="width:auto;padding:6px 10px;font-size:12px;">
+                    <option value="all">全部結果</option>
+                    <option value="remembered">只看：記住了</option>
+                    <option value="forgot">只看：忘記了</option>
+                  </select>
+                </div>
+                <div class="table-wrap">
+                  <table class="data-table">
+                    <thead>
+                      <tr>
+                        <th>時間</th>
+                        <th>歸屬日期</th>
+                        <th>單字</th>
+                        <th>耗時</th>
+                        <th style="text-align:right;">結果</th>
+                      </tr>
+                    </thead>
+                    <tbody id="logsTableBody"></tbody>
+                  </table>
+                </div>
+                <div class="pagination-bar">
+                  <span id="logsPageInfo">第 1 / 1 頁（共 0 筆）</span>
+                  <div class="pagination-controls">
+                    <button id="btnLogsPrev" type="button" class="btn btn-secondary btn-sm">上一頁</button>
+                    <button id="btnLogsNext" type="button" class="btn btn-secondary btn-sm">下一頁</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ========================================================
+             分頁四：詞庫與設定
+        ========================================================= -->
+        <section id="panel-settings" class="tab-panel hidden fade-in">
+          <div class="grid grid-12" style="align-items:start;">
+            <!-- 左側：10,000 字詞庫分頁檢索 -->
+            <div class="col-7">
+              <div class="card">
+                <div class="card-header">
+                  <div>
+                    <h2 style="font-size:15px;font-weight:700;">本地詞庫瀏覽（IndexedDB）</h2>
+                    <p id="wordsCountSummary" style="font-size:12px;color:var(--text-secondary);margin-top:2px;">載入中...</p>
+                  </div>
+                  <input
+                    type="text"
+                    id="wordSearchInput"
+                    class="input-control"
+                    style="max-width:260px;padding:7px 11px;font-size:13px;"
+                    placeholder="搜尋英文或中文（250ms 防抖）..."
+                  >
+                </div>
+
+                <div class="table-wrap">
+                  <table class="data-table">
+                    <thead>
+                      <tr>
+                        <th>單字 / 音標</th>
+                        <th>中文釋義與例句</th>
+                      </tr>
+                    </thead>
+                    <tbody id="wordsTableBody"></tbody>
+                  </table>
+                </div>
+
+                <div class="pagination-bar">
+                  <span id="wordsPageInfo">第 1 / 1 頁</span>
+                  <div class="pagination-controls">
+                    <button id="btnWordsFirst" type="button" class="btn btn-secondary btn-sm">首頁</button>
+                    <button id="btnWordsPrev" type="button" class="btn btn-secondary btn-sm">上一頁</button>
+                    <button id="btnWordsNext" type="button" class="btn btn-secondary btn-sm">下一頁</button>
+                    <button id="btnWordsLast" type="button" class="btn btn-secondary btn-sm">末頁</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 右側：詞庫載入管理與 Supabase 設定 -->
+            <div class="col-5">
+              <div class="card" style="margin-bottom:20px;">
+                <div class="card-header">
+                  <h3 style="font-size:15px;font-weight:700;">10,000 字詞庫管理</h3>
+                </div>
+                <div class="card-body">
+                  <p style="font-size:13px;color:var(--text-secondary);margin-bottom:14px;">
+                    目前本地 IndexedDB 共快取 <strong id="settingsVocabCount" style="color:var(--brand-900);">0</strong> 個單字。
+                  </p>
+                  <div style="display:flex;flex-direction:column;gap:10px;">
+                    <button id="btnReloadVocabJson" type="button" class="btn btn-primary btn-full">
+                      🔄 重新下載 ./vocab_10k.json
+                    </button>
+                    <button id="btnTriggerUploadVocab" type="button" class="btn btn-secondary btn-full">
+                      📥 手動上傳 vocab_10k.json
+                    </button>
+                    <input type="file" id="uploadVocabInput" accept=".json,application/json" class="hidden">
+                  </div>
+                </div>
+              </div>
+
+              <div class="card">
+                <div class="card-header">
+                  <h3 style="font-size:15px;font-weight:700;">Supabase 連線與帳號</h3>
+                </div>
+                <form id="settingsConfigForm" class="card-body">
+                  <div class="form-group">
+                    <label class="form-label" for="settingsUrlInput">Project URL</label>
+                    <input type="url" id="settingsUrlInput" class="input-control" placeholder="https://xxxxxxxxxxxx.supabase.co">
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label" for="settingsKeyInput">Anon Public Key</label>
+                    <input type="text" id="settingsKeyInput" class="input-control" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...">
+                  </div>
+                  <div style="display:flex;flex-direction:column;gap:8px;">
+                    <button type="submit" class="btn btn-primary btn-full">儲存並重新連線</button>
+                    <button id="btnSettingsLogout" type="button" class="btn btn-danger-outline btn-full btn-sm">登出帳號 / 返回登入頁</button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </div>
+        </section>
+
+      </div>
+    </main>
+
+    <footer class="app-footer">
+      <div class="container footer-inner">
+        <span>Daily10 單字背誦與紀錄（10,000 字雲端同步版）</span>
+        <span>IndexedDB: <code>DailyVocab10KDB</code>・Cloud: <code>daily_assignments</code> / <code>study_logs</code></span>
+      </div>
+    </footer>
+  </div>
+
+  <!-- 通用確認對話框（取代原生 confirm） -->
+  <div id="confirmModal" class="modal-backdrop hidden">
+    <div class="modal-dialog fade-in">
+      <div class="card-body">
+        <h3 id="confirmModalTitle" style="font-size:17px;font-weight:700;margin-bottom:8px;">確認操作</h3>
+        <p id="confirmModalMessage" style="font-size:14px;color:var(--text-secondary);line-height:1.6;"></p>
+        <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:20px;">
+          <button id="btnConfirmCancel" type="button" class="btn btn-secondary">取消</button>
+          <button id="btnConfirmOk" type="button" class="btn btn-danger">確定執行</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast 通知容器 -->
+  <div id="toastContainer" class="toast-container"></div>
+
+  <script>
+    'use strict';
+
+    /**
+     * ============================================================
+     * 1. Supabase 連線常數（部署至線上時請直接填入你的 URL 與 Key）
+     * ============================================================
+     */
+    const SUPABASE_URL = 'https://grzxlgbjoghaumzcewpu.supabase.co/rest/v1/';
+    const SUPABASE_ANON_KEY = 'sb_publishable_md0pPzNBM4rwMJICotLotg_DtdgKVT7';
+
+    const LS_SB_URL = 'daily10_10k_sb_url';
+    const LS_SB_KEY = 'daily10_10k_sb_key';
+    const LS_DEMO_STORE = 'daily10_10k_demo_cloud_v1';
+
+    const DAILY_QUOTA = 10;
+    const CHUNK_SIZE = 500;
+    const PAGE_SIZE = 50;
+
+    /** 備援 50 個進階英文單字（無法讀取 ./vocab_10k.json 時自動載入） */
+    const FALLBACK_50_WORDS = [
+      { term: 'ubiquitous', phonetic: '/juːˈbɪk.wɪ.təs/', meaning: 'adj. 無所不在的、隨處可見的', example: 'Smartphones have become ubiquitous in modern daily life.' },
+      { term: 'resilient', phonetic: '/rɪˈzɪl.jənt/', meaning: 'adj. 有彈性的、能迅速復原的', example: 'The local economy proved remarkably resilient after the crisis.' },
+      { term: 'mitigate', phonetic: '/ˈmɪt.ɪ.ɡeɪt/', meaning: 'v. 減輕、緩和（風險或傷害）', example: 'We need clear measures to mitigate the impact of climate change.' },
+      { term: 'pragmatic', phonetic: '/præɡˈmæt.ɪk/', meaning: 'adj. 務實的、注重實效的', example: 'She took a pragmatic approach to solving the budget shortage.' },
+      { term: 'ambiguous', phonetic: '/æmˈbɪɡ.ju.əs/', meaning: 'adj. 模稜兩可的、含糊不清的', example: 'The contract wording was ambiguous and caused a dispute.' },
+      { term: 'eloquent', phonetic: '/ˈel.ə.kwənt/', meaning: 'adj. 雄辯的、有說服力的', example: 'He delivered an eloquent speech that moved the entire audience.' },
+      { term: 'ephemeral', phonetic: '/ɪˈfem.ər.əl/', meaning: 'adj. 短暫的、轉瞬即逝的', example: 'Trends on social media are often ephemeral and fade within days.' },
+      { term: 'meticulous', phonetic: '/məˈtɪk.jə.ləs/', meaning: 'adj. 一絲不苟的、極為細心的', example: 'The architect is meticulous about every structural detail.' },
+      { term: 'scrutinize', phonetic: '/ˈskruː.tɪ.naɪz/', meaning: 'v. 仔細審查、詳細檢視', example: 'Auditors will scrutinize the financial statements carefully.' },
+      { term: 'catalyst', phonetic: '/ˈkæt.əl.ɪst/', meaning: 'n. 催化劑、促成變革的因素', example: 'Remote work acted as a catalyst for digital transformation.' },
+      { term: 'alleviate', phonetic: '/əˈliː.vi.eɪt/', meaning: 'v. 緩解、減輕（痛苦或困難）', example: 'The new subway line will alleviate traffic congestion downtown.' },
+      { term: 'candid', phonetic: '/ˈkæn.dɪd/', meaning: 'adj. 坦率的、直言不諱的', example: 'I appreciate your candid feedback on my presentation.' },
+      { term: 'consensus', phonetic: '/kənˈsen.səs/', meaning: 'n. 共識、一致意見', example: 'After hours of debate, the committee finally reached a consensus.' },
+      { term: 'detrimental', phonetic: '/ˌdet.rɪˈmen.təl/', meaning: 'adj. 有害的、不利的', example: 'Chronic lack of sleep is detrimental to long-term memory.' },
+      { term: 'discrepancy', phonetic: '/dɪˈskrep.ən.si/', meaning: 'n. 差異、不一致之處', example: 'There is a noticeable discrepancy between the two reports.' },
+      { term: 'empirical', phonetic: '/ɪmˈpɪr.ɪ.kəl/', meaning: 'adj. 實證的、以經驗為依據的', example: 'The theory needs stronger empirical evidence to be accepted.' },
+      { term: 'exacerbate', phonetic: '/ɪɡˈzæs.ə.beɪt/', meaning: 'v. 使惡化、使加劇', example: 'Rising fuel prices could exacerbate global inflation.' },
+      { term: 'feasible', phonetic: '/ˈfiː.zə.bəl/', meaning: 'adj. 可行的、辦得到的', example: 'Is it economically feasible to launch the product next quarter?' },
+      { term: 'fluctuate', phonetic: '/ˈflʌk.tʃu.eɪt/', meaning: 'v. 波動、起伏不定', example: 'Vegetable prices fluctuate depending on seasonal weather.' },
+      { term: 'formidable', phonetic: '/fɔːˈmɪd.ə.bəl/', meaning: 'adj. 強大的、令人敬畏的', example: 'Developing an AI model from scratch is a formidable challenge.' },
+      { term: 'hierarchy', phonetic: '/ˈhaɪə.rɑː.ki/', meaning: 'n. 階層制度、等級體系', example: 'Startups often prefer a flat structure over a rigid hierarchy.' },
+      { term: 'imminent', phonetic: '/ˈɪm.ɪ.nənt/', meaning: 'adj. 迫在眉睫的、即將發生的', example: 'Dark clouds warned hikers that a heavy storm was imminent.' },
+      { term: 'incentive', phonetic: '/ɪnˈsen.tɪv/', meaning: 'n. 誘因、激勵措施', example: 'Tax credits provide a strong incentive for buying electric cars.' },
+      { term: 'indigenous', phonetic: '/ɪnˈdɪdʒ.ɪ.nəs/', meaning: 'adj. 本土的、原住民的', example: 'The park protects several rare indigenous plant species.' },
+      { term: 'inevitable', phonetic: '/ɪˈnev.ɪ.tə.bəl/', meaning: 'adj. 不可避免的、必然的', example: 'When learning a new skill, making mistakes is inevitable.' },
+      { term: 'lucrative', phonetic: '/ˈluː.krə.tɪv/', meaning: 'adj. 利潤豐厚的、賺錢的', example: 'Software consulting turned out to be a very lucrative business.' },
+      { term: 'mundane', phonetic: '/mʌnˈdeɪn/', meaning: 'adj. 平凡的、單調乏味的', example: 'Automation can free workers from repetitive, mundane tasks.' },
+      { term: 'nuance', phonetic: '/ˈnjuː.ɑːns/', meaning: 'n. 細微差別、微妙之處', example: 'Translation software sometimes misses the cultural nuance of a joke.' },
+      { term: 'obsolete', phonetic: '/ˌɒb.səlˈiːt/', meaning: 'adj. 過時的、淘汰的', example: 'Streaming services quickly made DVD rental stores obsolete.' },
+      { term: 'paradigm', phonetic: '/ˈpær.ə.daɪm/', meaning: 'n. 典範、思維模式', example: 'Cloud computing created a new paradigm for enterprise IT.' },
+      { term: 'pervasive', phonetic: '/pəˈveɪ.sɪv/', meaning: 'adj. 普遍存在的、無孔不入的', example: 'There was a pervasive sense of optimism among the founders.' },
+      { term: 'plausible', phonetic: '/ˈplɔː.zə.bəl/', meaning: 'adj. 合情合理的、似乎可信的', example: 'His explanation for the server outage sounded completely plausible.' },
+      { term: 'precedent', phonetic: '/ˈpres.ɪ.dənt/', meaning: 'n. 先例、前例', example: 'The court ruling set an important legal precedent for data privacy.' },
+      { term: 'proliferate', phonetic: '/prəˈlɪf.ər.eɪt/', meaning: 'v. 激增、迅速擴散', example: 'Coffee shops have begun to proliferate along the main street.' },
+      { term: 'redundant', phonetic: '/rɪˈdʌn.dənt/', meaning: 'adj. 多餘的、重複冗贅的', example: 'Please remove any redundant steps from the onboarding flow.' },
+      { term: 'rigorous', phonetic: '/ˈrɪɡ.ər.əs/', meaning: 'adj. 嚴格的、縝密的', example: 'Every vaccine must undergo rigorous clinical trials before approval.' },
+      { term: 'salient', phonetic: '/ˈseɪ.li.ənt/', meaning: 'adj. 顯著的、最突出的', example: 'Let me summarize the most salient points from the meeting.' },
+      { term: 'skeptical', phonetic: '/ˈskep.tɪ.kəl/', meaning: 'adj. 持懷疑態度的', example: 'Investors remained skeptical about the overly ambitious forecast.' },
+      { term: 'spontaneous', phonetic: '/spɒnˈteɪ.ni.əs/', meaning: 'adj. 自發的、即興的', example: 'We took a spontaneous road trip to the coast over the weekend.' },
+      { term: 'stagnant', phonetic: '/ˈstæɡ.nənt/', meaning: 'adj. 停滯不前的、不流動的', example: 'Wages have remained stagnant despite rising living costs.' },
+      { term: 'stringent', phonetic: '/ˈstrɪn.dʒənt/', meaning: 'adj. 嚴格的、嚴厲的（法規等）', example: 'The aviation industry enforces stringent safety regulations.' },
+      { term: 'substantiate', phonetic: '/səbˈstæn.ʃi.eɪt/', meaning: 'v. 證實、提出證據支持', example: 'Can you substantiate your claim with concrete user data?' },
+      { term: 'tangible', phonetic: '/ˈtæn.dʒə.bəl/', meaning: 'adj. 有形的、具體可感的', example: 'The training program produced tangible improvements in productivity.' },
+      { term: 'tenacious', phonetic: '/təˈneɪ.ʃəs/', meaning: 'adj. 堅韌不拔的、執著的', example: 'Her tenacious pursuit of perfection inspired the whole team.' },
+      { term: 'tentative', phonetic: '/ˈten.tə.tɪv/', meaning: 'adj. 暫定的、試探性的', example: 'We have a tentative schedule for the product launch in May.' },
+      { term: 'threshold', phonetic: '/ˈθreʃ.həʊld/', meaning: 'n. 門檻、臨界點', example: 'Once noise exceeds the threshold, the alarm triggers automatically.' },
+      { term: 'unanimous', phonetic: '/juːˈnæn.ɪ.məs/', meaning: 'adj. 全體一致的、無異議的', example: 'The board made a unanimous decision to expand into Asia.' },
+      { term: 'versatile', phonetic: '/ˈvɜː.sə.taɪl/', meaning: 'adj. 多才多藝的、多功能的', example: 'Python is a versatile programming language used in many fields.' },
+      { term: 'viable', phonetic: '/ˈvaɪ.ə.bəl/', meaning: 'adj. 切實可行的、能存活的', example: 'Solar power is now a financially viable alternative to coal.' },
+      { term: 'volatile', phonetic: '/ˈvɒl.ə.taɪl/', meaning: 'adj. 動盪不定的、易變的', example: 'Cryptocurrency markets are notoriously volatile.' }
+    ];
+
+    /**
+     * ============================================================
+     * 2. 本地 IndexedDB 詞庫引擎（DailyVocab10KDB）
+     * ============================================================
+     */
+    const VocabDB = {
+      db: null,
+      cacheMap: new Map(), // 記憶體快取：term_lower -> wordObj，加速 10,000 字檢索與抽詞
+
+      async open() {
+        if (this.db) return this.db;
+        return new Promise((resolve, reject) => {
+          const req = indexedDB.open('DailyVocab10KDB', 1);
+          req.onupgradeneeded = (e) => {
+            const db = e.target.result;
+            if (!db.objectStoreNames.contains('words')) {
+              db.createObjectStore('words', { keyPath: 'term_lower' });
+            }
+          };
+          req.onsuccess = (e) => {
+            this.db = e.target.result;
+            resolve(this.db);
+          };
+          req.onerror = () => reject(req.error);
+        });
+      },
+
+      async count() {
+        const db = await this.open();
+        return new Promise((resolve, reject) => {
+          const tx = db.transaction('words', 'readonly');
+          const req = tx.objectStore('words').count();
+          req.onsuccess = () => resolve(req.result || 0);
+          req.onerror = () => reject(req.error);
+        });
+      },
+
+      async loadAllToMemory() {
+        const db = await this.open();
+        return new Promise((resolve, reject) => {
+          const tx = db.transaction('words', 'readonly');
+          const req = tx.objectStore('words').getAll();
+          req.onsuccess = () => {
+            this.cacheMap.clear();
+            for (const w of (req.result || [])) {
+              this.cacheMap.set(w.term_lower, w);
+            }
+            resolve(this.cacheMap.size);
+          };
+          req.onerror = () => reject(req.error);
+        });
+      },
+
+      async clear() {
+        const db = await this.open();
+        return new Promise((resolve, reject) => {
+          const tx = db.transaction('words', 'readwrite');
+          const req = tx.objectStore('words').clear();
+          req.onsuccess = () => {
+            this.cacheMap.clear();
+            resolve();
+          };
+          req.onerror = () => reject(req.error);
+        });
+      },
+
+      async putOne(wordObj) {
+        const db = await this.open();
+        this.cacheMap.set(wordObj.term_lower, wordObj);
+        return new Promise((resolve, reject) => {
+          const tx = db.transaction('words', 'readwrite');
+          tx.objectStore('words').put(wordObj);
+          tx.oncomplete = () => resolve();
+          tx.onerror = () => reject(tx.error);
+        });
+      },
+
+      /** 每 500 筆分塊寫入 IndexedDB 並回報進度 */
+      async bulkPutChunked(rawList, onProgress) {
+        const db = await this.open();
+        const normalized = [];
+        const seen = new Set();
+
+        for (const item of rawList) {
+          const term = String(item.term || item.word || '').trim();
+          const meaning = String(item.meaning || item.definition || '').trim();
+          if (!term || !meaning) continue;
+          const term_lower = term.toLowerCase();
+          if (seen.has(term_lower)) continue;
+          seen.add(term_lower);
+          normalized.push({
+            term,
+            term_lower,
+            phonetic: String(item.phonetic || item.ipa || '').trim(),
+            meaning,
+            example: String(item.example || item.sentence || '').trim()
+          });
+        }
+
+        const total = normalized.length;
+        for (let i = 0; i < total; i += CHUNK_SIZE) {
+          const chunk = normalized.slice(i, i + CHUNK_SIZE);
+          await new Promise((resolve, reject) => {
+            const tx = db.transaction('words', 'readwrite');
+            const store = tx.objectStore('words');
+            for (const w of chunk) {
+              store.put(w);
+              this.cacheMap.set(w.term_lower, w);
+            }
+            tx.oncomplete = () => resolve();
+            tx.onerror = () => reject(tx.error);
+          });
+          if (onProgress) onProgress(Math.min(i + chunk.length, total), total);
+          await new Promise(r => setTimeout(r, 0));
+        }
+        return total;
+      }
+    };
+
+    /**
+     * ============================================================
+     * 3. Free Dictionary API 即時自動補齊例句與音標
+     * ============================================================
+     */
+    const DictionaryService = {
+      fetchingSet: new Set(),
+      notFoundSet: new Set(),
+
+      async enrichWordIfNeeded(wordObj) {
+        if (!wordObj || wordObj.example || this.fetchingSet.has(wordObj.term_lower) || this.notFoundSet.has(wordObj.term_lower)) {
+          return false;
+        }
+        this.fetchingSet.add(wordObj.term_lower);
+        if (isCurrentCardTerm(wordObj.term_lower)) renderStudyTab();
+
+        try {
+          const res = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(wordObj.term)}`);
+          if (!res.ok) {
+            this.notFoundSet.add(wordObj.term_lower);
+            return false;
+          }
+          const data = await res.json();
+          if (!Array.isArray(data) || data.length === 0) {
+            this.notFoundSet.add(wordObj.term_lower);
+            return false;
+          }
+
+          let foundExample = '';
+          let foundPhonetic = '';
+
+          for (const entry of data) {
+            if (!foundPhonetic) {
+              if (entry.phonetic) foundPhonetic = entry.phonetic;
+              else if (Array.isArray(entry.phonetics)) {
+                const p = entry.phonetics.find(x => x && x.text);
+                if (p) foundPhonetic = p.text;
+              }
+            }
+            if (!foundExample && Array.isArray(entry.meanings)) {
+              for (const m of entry.meanings) {
+                if (Array.isArray(m.definitions)) {
+                  const def = m.definitions.find(d => d && d.example && d.example.trim());
+                  if (def) {
+                    foundExample = def.example.trim();
+                    break;
+                  }
+                }
+              }
+            }
+            if (foundExample && foundPhonetic) break;
+          }
+
+          if (foundExample || (!wordObj.phonetic && foundPhonetic)) {
+            const updated = {
+              ...wordObj,
+              phonetic: wordObj.phonetic || foundPhonetic,
+              example: foundExample || wordObj.example
+            };
+            await VocabDB.putOne(updated);
+            // 同步更新今日清單中的參考物件
+            for (const item of appState.todayList) {
+              if (item.term_lower === updated.term_lower) item.word = updated;
+            }
+            return true;
+          } else {
+            this.notFoundSet.add(wordObj.term_lower);
+            return false;
+          }
+        } catch (_) {
+          this.notFoundSet.add(wordObj.term_lower);
+          return false;
+        } finally {
+          this.fetchingSet.delete(wordObj.term_lower);
+          if (isCurrentCardTerm(wordObj.term_lower)) renderStudyTab();
+        }
+      }
+    };
+
+    function isCurrentCardTerm(termLower) {
+      const cur = appState.todayList[appState.currentCardIdx];
+      return !!(cur && cur.term_lower === termLower);
+    }
+
+    /**
+     * ============================================================
+     * 4. 應用程式狀態與工具函式
+     * ============================================================
+     */
+    let supabaseClient = null;
+    let authUnsubscribe = null;
+
+    const appState = {
+      mode: 'cloud', // 'cloud' | 'demo'
+      user: null,
+      activeTab: 'study',
+      activeDate: '',
+
+      // 從 Supabase 或 Demo 載入的個人進度快取
+      allAssignments: [], // [{ id, user_id, study_date, term_lower, is_completed, created_at }]
+      allLogs: [],        // [{ log_id, user_id, term_lower, study_date, result, time_spent_ms, reviewed_at }]
+
+      // 今日背誦狀態
+      todayList: [],
+      currentCardIdx: 0,
+      isAnswerRevealed: false,
+      cardShownAt: 0,
+      isSubmitting: false,
+
+      // 日曆回顧狀態
+      calYear: 2026,
+      calMonth: 10,
+      selectedCalDate: '',
+
+      // 錯題與日誌狀態
+      logResultFilter: 'all',
+      logsPage: 1,
+
+      // 詞庫瀏覽狀態
+      wordSearch: '',
+      wordsPage: 1
+    };
+
+    function getLocalTodayStr() {
+      const now = new Date();
+      return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    }
+
+    function addDays(dateStr, delta) {
+      const [y, m, d] = dateStr.split('-').map(Number);
+      const dt = new Date(y, m - 1, d);
+      dt.setDate(dt.getDate() + delta);
+      return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+    }
+
+    function escapeHtml(str) {
+      return String(str ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    function shuffleArray(arr) {
+      const a = [...arr];
+      for (let i = a.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [a[i], a[j]] = [a[j], a[i]];
+      }
+      return a;
+    }
+
+    function generateUuid() {
+      if (crypto && typeof crypto.randomUUID === 'function') return crypto.randomUUID();
+      return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+        const r = Math.random() * 16 | 0;
+        return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+      });
+    }
+
+    function speakEnglish(text) {
+      if (!text || !('speechSynthesis' in window)) return;
+      try {
+        window.speechSynthesis.cancel();
+        const u = new SpeechSynthesisUtterance(text);
+        u.lang = 'en-US';
+        u.rate = 0.95;
+        window.speechSynthesis.speak(u);
+      } catch (_) {}
+    }
+
+    function showToast(message, type = 'info') {
+      const container = document.getElementById('toastContainer');
+      const el = document.createElement('div');
+      el.className = `toast ${type} fade-in`;
+      el.textContent = message;
+      container.appendChild(el);
+      setTimeout(() => {
+        el.style.opacity = '0';
+        el.style.transition = 'opacity 0.25s ease';
+        setTimeout(() => el.remove(), 260);
+      }, 2600);
+    }
+
+    let confirmResolver = null;
+    function openConfirmModal(title, message, okLabel = '確定執行') {
+      return new Promise(resolve => {
+        confirmResolver = resolve;
+        document.getElementById('confirmModalTitle').textContent = title;
+        document.getElementById('confirmModalMessage').textContent = message;
+        document.getElementById('btnConfirmOk').textContent = okLabel;
+        document.getElementById('confirmModal').classList.remove('hidden');
+      });
+    }
+    function closeConfirmModal(result) {
+      document.getElementById('confirmModal').classList.add('hidden');
+      if (confirmResolver) {
+        const fn = confirmResolver;
+        confirmResolver = null;
+        fn(result);
+      }
+    }
+
+    function showGlobalBanner(msg) {
+      const el = document.getElementById('globalErrorBanner');
+      if (!msg) {
+        el.classList.add('hidden');
+        el.textContent = '';
+      } else {
+        el.textContent = '⚠ ' + msg;
+        el.classList.remove('hidden');
+      }
+    }
+
+    function formatError(err) {
+      const msg = String(err?.message || err || '發生未知錯誤');
+      if (msg.includes('does not exist')) return 'Supabase 尚未建立 daily_assignments 或 study_logs 資料表，請確認步驟 2 的 SQL 已執行。';
+      if (msg.toLowerCase().includes('row-level security')) return 'RLS 權限拒絕存取，請確認已正確登入 Google 帳號並套用 RLS Policy。';
+      return msg;
+    }
+
+    /**
+     * ============================================================
+     * 5. 雲端雙表同步層（自動切換 Supabase / Demo Mode）
+     * ============================================================
+     */
+    function loadDemoStore() {
+      try {
+        const raw = localStorage.getItem(LS_DEMO_STORE);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (parsed && Array.isArray(parsed.daily_assignments)) return parsed;
+        }
+      } catch (_) {}
+      return { daily_assignments: [], study_logs: [] };
+    }
+
+    function saveDemoStore() {
+      try {
+        localStorage.setItem(LS_DEMO_STORE, JSON.stringify({
+          daily_assignments: appState.allAssignments,
+          study_logs: appState.allLogs
+        }));
+      } catch (_) {}
+    }
+
+    const CloudSync = {
+      /** 載入該使用者所有 daily_assignments 與 study_logs */
+      async fetchAllUserData() {
+        if (appState.mode === 'demo') {
+          const demo = loadDemoStore();
+          appState.allAssignments = demo.daily_assignments || [];
+          appState.allLogs = demo.study_logs || [];
+          return;
+        }
+
+        const fetchAllRows = async (table, orderCol) => {
+          let rows = [];
+          let from = 0;
+          const step = 1000;
+          while (true) {
+            const { data, error } = await supabaseClient
+              .from(table)
+              .select('*')
+              .order(orderCol, { ascending: true })
+              .range(from, from + step - 1);
+            if (error) throw error;
+            if (!data || data.length === 0) break;
+            rows = rows.concat(data);
+            if (data.length < step) break;
+            from += step;
+          }
+          return rows;
+        };
+
+        const [assigns, logs] = await Promise.all([
+          fetchAllRows('daily_assignments', 'created_at'),
+          fetchAllRows('study_logs', 'reviewed_at')
+        ]);
+        appState.allAssignments = assigns;
+        appState.allLogs = logs;
+      },
+
+      /** 嚴格取得未背誦單字候選池（排除 study_logs 與 excludeSet） */
+      getUnstudiedCandidates(excludeSet = new Set()) {
+        const studiedSet = new Set(appState.allLogs.map(l => l.term_lower));
+        const candidates = [];
+        for (const [termLower, w] of VocabDB.cacheMap.entries()) {
+          if (!studiedSet.has(termLower) && !excludeSet.has(termLower)) {
+            candidates.push(w);
+          }
+        }
+        return shuffleArray(candidates);
+      },
+
+      /** 確保指定日期已有派發清單，無則嚴格抽取最多 10 個未背誦單字並同步寫入 */
+      async ensureDateAssignments(dateStr) {
+        let existing = appState.allAssignments.filter(a => a.study_date === dateStr);
+        if (existing.length === 0 && VocabDB.cacheMap.size > 0) {
+          const picked = this.getUnstudiedCandidates(new Set()).slice(0, DAILY_QUOTA);
+          if (picked.length > 0) {
+            const now = new Date().toISOString();
+            const newRows = picked.map(w => ({
+              user_id: appState.user.id,
+              study_date: dateStr,
+              term_lower: w.term_lower,
+              is_completed: false
+            }));
+
+            if (appState.mode === 'demo') {
+              const withIds = newRows.map(r => ({ ...r, id: generateUuid(), created_at: now }));
+              appState.allAssignments.push(...withIds);
+              saveDemoStore();
+              existing = withIds;
+            } else {
+              const { data, error } = await supabaseClient
+                .from('daily_assignments')
+                .upsert(newRows, { onConflict: 'user_id,study_date,term_lower', ignoreDuplicates: true })
+                .select('*');
+              if (error) throw error;
+              if (data && data.length > 0) {
+                appState.allAssignments.push(...data);
+                existing = data;
+              }
+            }
+          }
+        }
+
+        const dayLogs = appState.allLogs.filter(l => l.study_date === dateStr);
+        const lastResMap = new Map();
+        for (const l of dayLogs) lastResMap.set(l.term_lower, l.result);
+
+        return existing.map(a => ({
+          ...a,
+          word: VocabDB.cacheMap.get(a.term_lower) || {
+            term: a.term_lower,
+            term_lower: a.term_lower,
+            phonetic: '',
+            meaning: '（本地詞庫無此單字，請重新載入 vocab_10k.json）',
+            example: ''
+          },
+          last_result: lastResMap.get(a.term_lower) || null
+        }));
+      },
+
+      /** 寫入單次作答紀錄至 study_logs 並將 daily_assignments 標記完成 */
+      async recordReview({ assignmentId, termLower, studyDate, result, timeSpentMs }) {
+        const now = new Date().toISOString();
+        const logPayload = {
+          user_id: appState.user.id,
+          term_lower: termLower,
+          study_date: studyDate,
+          result,
+          time_spent_ms: timeSpentMs,
+          reviewed_at: now
+        };
+
+        if (appState.mode === 'demo') {
+          appState.allLogs.push({ ...logPayload, log_id: generateUuid() });
+          const target = appState.allAssignments.find(a => a.id === assignmentId);
+          if (target) target.is_completed = true;
+          saveDemoStore();
+          return;
+        }
+
+        const [logRes, assignRes] = await Promise.all([
+          supabaseClient.from('study_logs').insert(logPayload).select('*').single(),
+          supabaseClient.from('daily_assignments').update({ is_completed: true }).eq('id', assignmentId)
+        ]);
+        if (logRes.error) throw logRes.error;
+        if (assignRes.error) throw assignRes.error;
+
+        if (logRes.data) appState.allLogs.push(logRes.data);
+        const target = appState.allAssignments.find(a => a.id === assignmentId);
+        if (target) target.is_completed = true;
+      },
+
+      /** 一鍵重選當日所有未完成單字 */
+      async rerollUnfinished(dateStr, currentList) {
+        const unfinished = currentList.filter(a => !a.is_completed);
+        if (unfinished.length === 0) return { status: 'all_completed' };
+
+        const excludeSet = new Set(currentList.map(a => a.term_lower));
+        const candidates = this.getUnstudiedCandidates(excludeSet);
+        if (candidates.length === 0) return { status: 'no_candidates' };
+
+        const count = Math.min(unfinished.length, candidates.length);
+        const delIds = unfinished.slice(0, count).map(a => a.id);
+        const newWords = candidates.slice(0, count);
+        const now = new Date().toISOString();
+
+        const insertRows = newWords.map(w => ({
+          user_id: appState.user.id,
+          study_date: dateStr,
+          term_lower: w.term_lower,
+          is_completed: false
+        }));
+
+        if (appState.mode === 'demo') {
+          const delSet = new Set(delIds);
+          appState.allAssignments = appState.allAssignments.filter(a => !delSet.has(a.id));
+          appState.allAssignments.push(...insertRows.map(r => ({ ...r, id: generateUuid(), created_at: now })));
+          saveDemoStore();
+          return { status: 'ok', count };
+        }
+
+        const { error: delErr } = await supabaseClient.from('daily_assignments').delete().in('id', delIds);
+        if (delErr) throw delErr;
+
+        const { data: insData, error: insErr } = await supabaseClient
+          .from('daily_assignments')
+          .insert(insertRows)
+          .select('*');
+        if (insErr) throw insErr;
+
+        const delSet = new Set(delIds);
+        appState.allAssignments = appState.allAssignments.filter(a => !delSet.has(a.id));
+        if (insData) appState.allAssignments.push(...insData);
+        return { status: 'ok', count };
+      },
+
+      /** 重選單一未完成單字 */
+      async rerollSingle(dateStr, assignmentId, currentList) {
+        const target = currentList.find(a => a.id === assignmentId);
+        if (!target || target.is_completed) return { status: 'invalid' };
+
+        const excludeSet = new Set(currentList.map(a => a.term_lower));
+        const candidates = this.getUnstudiedCandidates(excludeSet);
+        if (candidates.length === 0) return { status: 'no_candidates' };
+
+        const newWord = candidates[0];
+
+        if (appState.mode === 'demo') {
+          const rec = appState.allAssignments.find(a => a.id === assignmentId);
+          if (rec) {
+            rec.term_lower = newWord.term_lower;
+            rec.is_completed = false;
+          }
+          saveDemoStore();
+          return { status: 'ok', newWord };
+        }
+
+        const { error } = await supabaseClient
+          .from('daily_assignments')
+          .update({ term_lower: newWord.term_lower, is_completed: false })
+          .eq('id', assignmentId);
+        if (error) throw error;
+
+        const rec = appState.allAssignments.find(a => a.id === assignmentId);
+        if (rec) {
+          rec.term_lower = newWord.term_lower;
+          rec.is_completed = false;
+        }
+        return { status: 'ok', newWord };
+      }
+    };
+
+    /**
+     * ============================================================
+     * 6. 自動載入 vocab_10k.json 與 IndexedDB 初始化
+     * ============================================================
+     */
+    function setVocabLoadingUI(visible, text = '', pct = 0) {
+      const overlay = document.getElementById('vocabLoadingOverlay');
+      overlay.classList.toggle('hidden', !visible);
+      if (visible) {
+        document.getElementById('vocabLoadingText').textContent = text;
+        document.getElementById('vocabLoadingBar').style.width = `${pct}%`;
+        document.getElementById('vocabLoadingPct').textContent = `${pct}%`;
+      }
+    }
+
+    async function ensureVocabLoaded(forceReloadRemote = false) {
+      const existingCount = await VocabDB.count();
+      if (!forceReloadRemote && existingCount > 0) {
+        await VocabDB.loadAllToMemory();
+        return existingCount;
+      }
+
+      setVocabLoadingUI(true, '正在下載同目錄下的 ./vocab_10k.json...', 5);
+      try {
+        const res = await fetch('./vocab_10k.json', { cache: 'no-store' });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        if (!Array.isArray(data) || data.length === 0) throw new Error('JSON 格式無效或為空陣列');
+
+        if (forceReloadRemote) await VocabDB.clear();
+        const saved = await VocabDB.bulkPutChunked(data, (done, total) => {
+          const pct = Math.round(15 + (done / total) * 85);
+          setVocabLoadingUI(true, `正在寫入本地 IndexedDB（${done.toLocaleString()} / ${total.toLocaleString()} 字）...`, pct);
+        });
+        setVocabLoadingUI(false);
+        showToast(`已成功載入 ${saved.toLocaleString()} 個單字至本地快取！`, 'success');
+        return saved;
+      } catch (err) {
+        if (!forceReloadRemote && existingCount === 0) {
+          setVocabLoadingUI(true, '找不到 ./vocab_10k.json，改為載入內建 50 個備援單字...', 60);
+          const saved = await VocabDB.bulkPutChunked(FALLBACK_50_WORDS);
+          setVocabLoadingUI(false);
+          showToast('未偵測到 ./vocab_10k.json，已載入 50 個內建進階單字（可於設定頁手動上傳）', 'warning');
+          return saved;
+        } else {
+          setVocabLoadingUI(false);
+          showToast('下載 ./vocab_10k.json 失敗，請確認檔案已上傳至同目錄，或使用手動上傳功能', 'danger');
+          return existingCount;
+        }
+      }
+    }
+
+    /**
+     * ============================================================
+     * 7. 統計與各分頁渲染函式
+     * ============================================================
+     */
+    function buildDateSummaryMap() {
+      const map = new Map();
+      for (const a of appState.allAssignments) {
+        if (!map.has(a.study_date)) map.set(a.study_date, { total: 0, done: 0 });
+        const entry = map.get(a.study_date);
+        entry.total++;
+        if (a.is_completed) entry.done++;
+      }
+      return map;
+    }
+
+    function calculateStreak(summaryMap, refDate) {
+      let streak = 0;
+      let cursor = refDate;
+      const curInfo = summaryMap.get(cursor);
+      if (!curInfo || curInfo.total === 0 || curInfo.done < curInfo.total) {
+        cursor = addDays(cursor, -1);
+      }
+      while (true) {
+        const info = summaryMap.get(cursor);
+        if (info && info.total > 0 && info.done >= info.total) {
+          streak++;
+          cursor = addDays(cursor, -1);
+        } else {
+          break;
+        }
+      }
+      return streak;
+    }
+
+    function updateHeaderStats() {
+      const done = appState.todayList.filter(a => a.is_completed).length;
+      const total = appState.todayList.length || DAILY_QUOTA;
+      const summaryMap = buildDateSummaryMap();
+      const streak = calculateStreak(summaryMap, appState.activeDate);
+      const uniqueStudied = new Set(appState.allLogs.map(l => l.term_lower)).size;
+
+      document.getElementById('headerProgressPill').textContent = `今日 ${done}/${total}`;
+      document.getElementById('headerStreakPill').textContent = `🔥 連續 ${streak} 天`;
+      document.getElementById('headerStudiedPill').textContent = `已背 ${uniqueStudied.toLocaleString()} 字`;
+      document.getElementById('tabBadgeProgress').textContent = `${done}/${total}`;
+      document.getElementById('tabBadgeWords').textContent = VocabDB.cacheMap.size.toLocaleString();
+      document.getElementById('settingsVocabCount').textContent = VocabDB.cacheMap.size.toLocaleString();
+    }
+
+    /** 分頁 1：今日背誦 */
+    function renderStudyTab() {
+      const list = appState.todayList;
+      const done = list.filter(a => a.is_completed).length;
+      const pct = list.length > 0 ? Math.round((done / list.length) * 100) : 0;
+
+      document.getElementById('simDateInput').value = appState.activeDate;
+      document.getElementById('studyDateHeading').textContent = appState.activeDate;
+      document.getElementById('studyCompletedNum').textContent = done;
+      document.getElementById('studyQuotaNum').textContent = list.length;
+      document.getElementById('studyProgressBar').style.width = `${pct}%`;
+
+      const insuffEl = document.getElementById('insufficientWordsBanner');
+      if (list.length < DAILY_QUOTA) {
+        insuffEl.textContent = list.length === 0
+          ? '⚠ 詞庫中已無未背誦單字，請至「詞庫與設定」上傳 10,000 字詞庫。'
+          : `ℹ 未背誦單字不足 ${DAILY_QUOTA} 個，已嚴格派發剩餘 ${list.length} 個未背誦單字。`;
+        insuffEl.classList.remove('hidden');
+      } else {
+        insuffEl.classList.add('hidden');
+      }
+
+      document.getElementById('btnRerollUnfinished').disabled = !list.some(a => !a.is_completed);
+
+      const statusBadge = document.getElementById('studyStatusBadge');
+      const completeBanner = document.getElementById('dailyCompleteBanner');
+      if (list.length > 0 && done === list.length) {
+        statusBadge.textContent = `${done}/${list.length} 已達標`;
+        statusBadge.className = 'badge badge-remembered';
+        completeBanner.classList.remove('hidden');
+      } else {
+        statusBadge.textContent = '進行中';
+        statusBadge.className = 'badge badge-brand';
+        completeBanner.classList.add('hidden');
+      }
+
+      const rerollCurBtn = document.getElementById('btnRerollCurrentWord');
+
+      if (list.length === 0) {
+        document.getElementById('cardIndexBadge').textContent = '第 0 / 0 字';
+        document.getElementById('cardTerm').textContent = '無未背誦單字';
+        document.getElementById('cardPhonetic').textContent = '';
+        document.getElementById('cardRevealPrompt').classList.add('hidden');
+        document.getElementById('cardAnswerArea').classList.add('hidden');
+        rerollCurBtn.classList.add('hidden');
+        document.getElementById('todayWordList').innerHTML =
+          '<li style="padding:28px;text-align:center;color:var(--text-muted);font-size:13px;">目前沒有未背誦單字</li>';
+        return;
+      }
+
+      if (appState.currentCardIdx >= list.length) appState.currentCardIdx = 0;
+      const cur = list[appState.currentCardIdx];
+      const w = cur.word;
+
+      // 若此單字無例句，背景觸發 Free Dictionary API 抓取
+      if (w && !w.example) DictionaryService.enrichWordIfNeeded(w);
+
+      document.getElementById('cardIndexBadge').textContent = `第 ${appState.currentCardIdx + 1} / ${list.length} 字`;
+      rerollCurBtn.classList.toggle('hidden', !!cur.is_completed);
+
+      const resLabel = document.getElementById('cardTodayResultLabel');
+      if (cur.last_result === 'remembered') {
+        resLabel.innerHTML = '<span style="color:var(--emerald-700);">今日狀態：✓ 記住了</span>';
+      } else if (cur.last_result === 'forgot') {
+        resLabel.innerHTML = '<span style="color:var(--rose-700);">今日狀態：✕ 忘記了</span>';
+      } else if (cur.is_completed) {
+        resLabel.innerHTML = '<span style="color:var(--emerald-700);">今日狀態：✓ 已完成</span>';
+      } else {
+        resLabel.innerHTML = '<span>今日尚未作答</span>';
+      }
+
+      document.getElementById('cardPhonetic').textContent = w.phonetic || '';
+      document.getElementById('cardTerm').textContent = w.term;
+      document.getElementById('cardMeaning').textContent = w.meaning;
+
+      const exEl = document.getElementById('cardExample');
+      const speakExBtn = document.getElementById('btnSpeakExample');
+      if (w.example) {
+        exEl.className = 'example-en';
+        exEl.textContent = w.example;
+        speakExBtn.classList.remove('hidden');
+      } else if (DictionaryService.fetchingSet.has(w.term_lower)) {
+        exEl.className = 'example-status';
+        exEl.textContent = '正在透過 Free Dictionary API 抓取例句...';
+        speakExBtn.classList.add('hidden');
+      } else {
+        exEl.className = 'example-status';
+        exEl.textContent = '無可用例句';
+        speakExBtn.classList.add('hidden');
+      }
+
+      document.getElementById('cardRevealPrompt').classList.toggle('hidden', appState.isAnswerRevealed);
+      document.getElementById('cardAnswerArea').classList.toggle('hidden', !appState.isAnswerRevealed);
+
+      document.getElementById('todayWordList').innerHTML = list.map((item, idx) => {
+        const isCur = idx === appState.currentCardIdx;
+        const circleClass = item.last_result === 'forgot' ? 'err' : (item.is_completed ? 'ok' : '');
+        const circleTxt = item.last_result === 'forgot' ? '!' : (item.is_completed ? '✓' : (idx + 1));
+        const badge = item.last_result === 'remembered'
+          ? '<span class="badge badge-remembered">記住了</span>'
+          : item.last_result === 'forgot'
+          ? '<span class="badge badge-forgot">忘記了</span>'
+          : item.is_completed
+          ? '<span class="badge badge-remembered">完成</span>'
+          : '<span class="badge badge-new">未作答</span>';
+
+        const swapBtn = !item.is_completed
+          ? `<button type="button" data-reroll-assign="${item.id}" data-reroll-idx="${idx}" class="btn btn-secondary btn-sm" style="padding:4px 8px;font-size:11.5px;">🔄 換字</button>`
+          : '';
+
+        return `
+          <li>
+            <div role="button" tabindex="0" data-jump-idx="${idx}" class="today-list-item ${isCur ? 'current' : ''}">
+              <div style="display:flex;align-items:center;gap:10px;min-width:0;flex:1;">
+                <span class="today-idx-circle ${circleClass}">${circleTxt}</span>
+                <div style="min-width:0;">
+                  <div style="font-weight:700;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(item.word.term)}</div>
+                  <div style="font-size:12px;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                    ${item.is_completed ? escapeHtml(item.word.meaning) : '點擊切換至此單字'}
+                  </div>
+                </div>
+              </div>
+              <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
+                ${swapBtn}
+                ${badge}
+              </div>
+            </div>
+          </li>
+        `;
+      }).join('');
+    }
+
+    /** 分頁 2：日曆回顧 */
+    function renderCalendarTab() {
+      const summaryMap = buildDateSummaryMap();
+      const streak = calculateStreak(summaryMap, appState.activeDate);
+      const totalLogs = appState.allLogs.length;
+      const rememberedLogs = appState.allLogs.filter(l => l.result === 'remembered').length;
+      const accuracy = totalLogs > 0 ? Math.round((rememberedLogs / totalLogs) * 100) : 0;
+
+      document.getElementById('calStatStreak').textContent = `${streak} 天`;
+      document.getElementById('calStatDays').textContent = `${summaryMap.size} 天`;
+      document.getElementById('calStatLogs').textContent = `${totalLogs.toLocaleString()} 次`;
+      document.getElementById('calStatAccuracy').textContent = `${accuracy}%`;
+
+      const y = appState.calYear;
+      const m = appState.calMonth;
+      document.getElementById('calendarMonthLabel').textContent = `${y} 年 ${m + 1} 月`;
+
+      const firstDow = new Date(y, m, 1).getDay();
+      const daysInMonth = new Date(y, m + 1, 0).getDate();
+      let html = '';
+      for (let i = 0; i < firstDow; i++) html += '<div></div>';
+
+      for (let d = 1; d <= daysInMonth; d++) {
+        const dateStr = `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+        const info = summaryMap.get(dateStr);
+        let stateClass = '';
+        let subHtml = '';
+        if (info && info.total > 0) {
+          if (info.done >= info.total) stateClass = 'done';
+          else if (info.done > 0) stateClass = 'partial';
+          else stateClass = 'assigned';
+          subHtml = `<span class="cal-sub">${info.done}/${info.total}</span>`;
+        }
+        const selClass = appState.selectedCalDate === dateStr ? 'selected' : '';
+        const simClass = appState.activeDate === dateStr ? 'sim-today' : '';
+
+        html += `
+          <button type="button" data-cal-date="${dateStr}" class="cal-day ${stateClass} ${selClass} ${simClass}">
+            <span>${d}</span>
+            ${subHtml}
+          </button>
+        `;
+      }
+      document.getElementById('calendarGrid').innerHTML = html;
+      renderCalendarDetail(appState.selectedCalDate || appState.activeDate);
+    }
+
+    function renderCalendarDetail(dateStr) {
+      appState.selectedCalDate = dateStr;
+      document.getElementById('calDetailDateTitle').textContent = dateStr;
+      const switchBtn = document.getElementById('btnSwitchToCalDate');
+      switchBtn.classList.remove('hidden');
+      switchBtn.dataset.targetDate = dateStr;
+
+      const assigns = appState.allAssignments.filter(a => a.study_date === dateStr);
+      const logs = appState.allLogs
+        .filter(l => l.study_date === dateStr)
+        .sort((a, b) => new Date(b.reviewed_at) - new Date(a.reviewed_at));
+
+      document.getElementById('calDayLogsCount').textContent = `${logs.length} 筆`;
+      const listEl = document.getElementById('calDetailWordList');
+      const summaryEl = document.getElementById('calDetailSummary');
+
+      if (assigns.length === 0) {
+        summaryEl.textContent = '此日期尚未派發單字';
+        listEl.innerHTML = '<div style="padding:28px;text-align:center;color:var(--text-muted);font-size:13px;">該日尚無派發紀錄，可點擊「切換至該日背誦」自動派發。</div>';
+      } else {
+        const done = assigns.filter(a => a.is_completed).length;
+        summaryEl.textContent = `完成進度 ${done}/${assigns.length}・當日答題紀錄 ${logs.length} 筆`;
+        listEl.innerHTML = assigns.map((a, idx) => {
+          const w = VocabDB.cacheMap.get(a.term_lower);
+          return `
+            <div style="padding:11px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:12px;">
+              <div style="min-width:0;">
+                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                  <span style="font-size:12px;color:var(--text-muted);font-weight:700;">${idx + 1}.</span>
+                  <strong style="font-size:14px;">${escapeHtml(w ? w.term : a.term_lower)}</strong>
+                  <span style="font-family:var(--font-mono);font-size:12px;color:var(--text-muted);">${escapeHtml(w ? w.phonetic : '')}</span>
+                  <button type="button" data-speak="${escapeHtml(w ? w.term : a.term_lower)}" class="btn btn-subtle btn-sm" style="padding:2px 6px;">🔊</button>
+                </div>
+                <div style="font-size:12px;color:var(--text-secondary);margin-top:2px;">${escapeHtml(w ? w.meaning : '')}</div>
+              </div>
+              ${a.is_completed ? '<span class="badge badge-remembered">已完成</span>' : '<span class="badge badge-new">未完成</span>'}
+            </div>
+          `;
+        }).join('');
+      }
+
+      const tbody = document.getElementById('calDayLogsTbody');
+      if (logs.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--text-muted);padding:24px;">該日尚無答題明細</td></tr>';
+      } else {
+        tbody.innerHTML = logs.map(l => {
+          const w = VocabDB.cacheMap.get(l.term_lower);
+          const dt = new Date(l.reviewed_at);
+          const tStr = isNaN(dt.getTime()) ? l.reviewed_at : dt.toLocaleTimeString('zh-TW', { hour12: false });
+          const sec = ((l.time_spent_ms || 0) / 1000).toFixed(1) + 's';
+          const badge = l.result === 'remembered'
+            ? '<span class="badge badge-remembered">記住了</span>'
+            : '<span class="badge badge-forgot">忘記了</span>';
+          return `
+            <tr>
+              <td style="font-family:var(--font-mono);font-size:12px;color:var(--text-secondary);">${tStr}</td>
+              <td><strong>${escapeHtml(w ? w.term : l.term_lower)}</strong></td>
+              <td style="font-family:var(--font-mono);font-size:12px;color:var(--text-secondary);">${sec}</td>
+              <td style="text-align:right;">${badge}</td>
+            </tr>
+          `;
+        }).join('');
+      }
+    }
+
+    /** 分頁 3：錯題與日誌 */
+    function renderRecordsTab() {
+      // 1. 高頻錯題排行
+      const statMap = new Map();
+      for (const l of appState.allLogs) {
+        if (!statMap.has(l.term_lower)) statMap.set(l.term_lower, { total: 0, forgot: 0 });
+        const s = statMap.get(l.term_lower);
+        s.total++;
+        if (l.result === 'forgot') s.forgot++;
+      }
+
+      const errorList = [];
+      for (const [termLower, s] of statMap.entries()) {
+        if (s.forgot > 0) {
+          const w = VocabDB.cacheMap.get(termLower);
+          errorList.push({
+            term: w ? w.term : termLower,
+            meaning: w ? w.meaning : '',
+            total: s.total,
+            forgot: s.forgot,
+            errorRate: Math.round((s.forgot / s.total) * 100)
+          });
+        }
+      }
+      errorList.sort((a, b) => b.forgot - a.forgot || b.errorRate - a.errorRate);
+
+      document.getElementById('errorBookCountBadge').textContent = `${errorList.length} 字`;
+      const errEl = document.getElementById('errorBookList');
+      if (errorList.length === 0) {
+        errEl.innerHTML = '<div style="padding:36px;text-align:center;color:var(--text-muted);font-size:14px;">目前沒有錯題紀錄</div>';
+      } else {
+        errEl.innerHTML = errorList.map((item, idx) => `
+          <div style="padding:12px 18px;border-bottom:1px solid var(--border);">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+              <div style="display:flex;align-items:center;gap:8px;min-width:0;">
+                <span class="badge badge-forgot">${idx + 1}</span>
+                <strong style="font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(item.term)}</strong>
+                <button type="button" data-speak="${escapeHtml(item.term)}" class="btn btn-subtle btn-sm" style="padding:2px 6px;">🔊</button>
+              </div>
+              <span style="font-size:12px;font-weight:700;color:var(--rose-700);white-space:nowrap;">
+                錯 ${item.forgot} / 共 ${item.total} 次（${item.errorRate}%）
+              </span>
+            </div>
+            <p style="font-size:12px;color:var(--text-secondary);margin-top:4px;">${escapeHtml(item.meaning)}</p>
+            <div class="progress-track" style="height:6px;margin-top:8px;">
+              <div style="height:100%;background:var(--rose-600);width:${item.errorRate}%;"></div>
+            </div>
+          </div>
+        `).join('');
+      }
+
+      // 2. 分頁背誦明細
+      let filtered = [...appState.allLogs].sort((a, b) => new Date(b.reviewed_at) - new Date(a.reviewed_at));
+      if (appState.logResultFilter !== 'all') {
+        filtered = filtered.filter(l => l.result === appState.logResultFilter);
+      }
+      const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+      if (appState.logsPage > totalPages) appState.logsPage = totalPages;
+
+      const start = (appState.logsPage - 1) * PAGE_SIZE;
+      const pageRows = filtered.slice(start, start + PAGE_SIZE);
+
+      document.getElementById('logsPageInfo').textContent = `第 ${appState.logsPage} / ${totalPages} 頁（共 ${filtered.length.toLocaleString()} 筆）`;
+      document.getElementById('btnLogsPrev').disabled = appState.logsPage <= 1;
+      document.getElementById('btnLogsNext').disabled = appState.logsPage >= totalPages;
+
+      const tbody = document.getElementById('logsTableBody');
+      if (pageRows.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--text-muted);padding:32px;">尚無符合條件的背誦紀錄</td></tr>';
+      } else {
+        tbody.innerHTML = pageRows.map(l => {
+          const w = VocabDB.cacheMap.get(l.term_lower);
+          const dt = new Date(l.reviewed_at);
+          const tStr = isNaN(dt.getTime()) ? l.reviewed_at : dt.toLocaleTimeString('zh-TW', { hour12: false });
+          const sec = ((l.time_spent_ms || 0) / 1000).toFixed(1) + 's';
+          const badge = l.result === 'remembered'
+            ? '<span class="badge badge-remembered">記住了</span>'
+            : '<span class="badge badge-forgot">忘記了</span>';
+          return `
+            <tr>
+              <td style="font-family:var(--font-mono);font-size:12px;color:var(--text-secondary);white-space:nowrap;">${tStr}</td>
+              <td style="font-size:12px;font-weight:600;white-space:nowrap;">${escapeHtml(l.study_date)}</td>
+              <td><strong>${escapeHtml(w ? w.term : l.term_lower)}</strong></td>
+              <td style="font-family:var(--font-mono);font-size:12px;color:var(--text-secondary);">${sec}</td>
+              <td style="text-align:right;">${badge}</td>
+            </tr>
+          `;
+        }).join('');
+      }
+    }
+
+    /** 分頁 4：詞庫分頁瀏覽（每頁 50 筆 + 250ms 防抖搜尋） */
+    function renderSettingsVocabTable() {
+      const kw = appState.wordSearch.trim().toLowerCase();
+      const allWords = Array.from(VocabDB.cacheMap.values());
+      const filtered = kw
+        ? allWords.filter(w => w.term_lower.includes(kw) || w.meaning.toLowerCase().includes(kw))
+        : allWords;
+
+      const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+      if (appState.wordsPage > totalPages) appState.wordsPage = totalPages;
+
+      const start = (appState.wordsPage - 1) * PAGE_SIZE;
+      const rows = filtered.slice(start, start + PAGE_SIZE);
+
+      document.getElementById('wordsCountSummary').textContent =
+        `符合條件 ${filtered.length.toLocaleString()} 字（總計 ${allWords.length.toLocaleString()} 字）`;
+      document.getElementById('wordsPageInfo').textContent =
+        `第 ${appState.wordsPage} / ${totalPages} 頁（第 ${filtered.length ? start + 1 : 0}–${start + rows.length} 筆）`;
+
+      document.getElementById('btnWordsFirst').disabled = appState.wordsPage <= 1;
+      document.getElementById('btnWordsPrev').disabled = appState.wordsPage <= 1;
+      document.getElementById('btnWordsNext').disabled = appState.wordsPage >= totalPages;
+      document.getElementById('btnWordsLast').disabled = appState.wordsPage >= totalPages;
+
+      const tbody = document.getElementById('wordsTableBody');
+      if (rows.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="2" style="text-align:center;color:var(--text-muted);padding:32px;">找不到符合條件的單字</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = rows.map(w => `
+        <tr>
+          <td style="white-space:nowrap;">
+            <div style="display:flex;align-items:center;gap:8px;">
+              <button type="button" data-speak="${escapeHtml(w.term)}" class="btn btn-subtle btn-sm" style="padding:3px 6px;">🔊</button>
+              <div>
+                <div style="font-weight:700;font-size:14px;">${escapeHtml(w.term)}</div>
+                <div style="font-family:var(--font-mono);font-size:11px;color:var(--text-muted);">${escapeHtml(w.phonetic || '')}</div>
+              </div>
+            </div>
+          </td>
+          <td style="max-width:420px;">
+            <div style="font-weight:500;">${escapeHtml(w.meaning)}</div>
+            ${w.example ? `<div style="font-size:11.5px;color:var(--text-muted);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml(w.example)}">${escapeHtml(w.example)}</div>` : ''}
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    /** 載入指定學習日期 */
+    async function loadStudyDate(dateStr) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return;
+      appState.activeDate = dateStr;
+      const [y, m] = dateStr.split('-').map(Number);
+      appState.calYear = y;
+      appState.calMonth = m - 1;
+      appState.selectedCalDate = dateStr;
+
+      try {
+        showGlobalBanner('');
+        appState.todayList = await CloudSync.ensureDateAssignments(dateStr);
+        const firstUnfinished = appState.todayList.findIndex(a => !a.is_completed);
+        appState.currentCardIdx = firstUnfinished !== -1 ? firstUnfinished : 0;
+        appState.isAnswerRevealed = false;
+        appState.cardShownAt = performance.now();
+
+        updateHeaderStats();
+        renderStudyTab();
+
+        // 背景依序為今日缺少例句的單字補齊例句
+        for (const item of appState.todayList) {
+          if (item.word && !item.word.example) {
+            DictionaryService.enrichWordIfNeeded(item.word);
+          }
+        }
+      } catch (err) {
+        showGlobalBanner(formatError(err));
+      }
+    }
+
+    async function handleRecordReview(result) {
+      if (appState.isSubmitting) return;
+      const item = appState.todayList[appState.currentCardIdx];
+      if (!item || !item.word) return;
+
+      appState.isSubmitting = true;
+      const elapsedMs = Math.max(100, Math.round(performance.now() - appState.cardShownAt));
+
+      try {
+        await CloudSync.recordReview({
+          assignmentId: item.id,
+          termLower: item.term_lower,
+          studyDate: appState.activeDate,
+          result,
+          timeSpentMs: elapsedMs
+        });
+
+        item.is_completed = true;
+        item.last_result = result;
+
+        showToast(
+          result === 'remembered'
+            ? `已記住「${item.word.term}」（${(elapsedMs / 1000).toFixed(1)} 秒）`
+            : `已標記「${item.word.term}」為忘記`,
+          result === 'remembered' ? 'success' : 'warning'
+        );
+
+        let nextIdx = -1;
+        for (let i = appState.currentCardIdx + 1; i < appState.todayList.length; i++) {
+          if (!appState.todayList[i].is_completed) { nextIdx = i; break; }
+        }
+        if (nextIdx === -1) {
+          for (let i = 0; i <= appState.currentCardIdx; i++) {
+            if (!appState.todayList[i].is_completed) { nextIdx = i; break; }
+          }
+        }
+        if (nextIdx !== -1) appState.currentCardIdx = nextIdx;
+        else if (appState.currentCardIdx < appState.todayList.length - 1) appState.currentCardIdx++;
+
+        appState.isAnswerRevealed = false;
+        appState.cardShownAt = performance.now();
+
+        updateHeaderStats();
+        renderStudyTab();
+      } catch (err) {
+        showToast(formatError(err), 'danger');
+      } finally {
+        appState.isSubmitting = false;
+      }
+    }
+
+    function switchTab(tabName) {
+      appState.activeTab = tabName;
+      document.querySelectorAll('.tab-panel').forEach(p => p.classList.add('hidden'));
+      document.getElementById(`panel-${tabName}`).classList.remove('hidden');
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tabName));
+
+      if (tabName === 'study') renderStudyTab();
+      else if (tabName === 'calendar') renderCalendarTab();
+      else if (tabName === 'records') renderRecordsTab();
+      else if (tabName === 'settings') {
+        const cfg = getSupabaseConfig();
+        document.getElementById('settingsUrlInput').value = cfg.url;
+        document.getElementById('settingsKeyInput').value = cfg.key;
+        renderSettingsVocabTable();
+      }
+    }
+
+    /**
+     * ============================================================
+     * 8. Supabase 連線設定與 Auth 初始化
+     * ============================================================
+     */
+    function getSupabaseConfig() {
+      const constUrl = (SUPABASE_URL && SUPABASE_URL !== 'YOUR_SUPABASE_URL') ? SUPABASE_URL.trim() : '';
+      const constKey = (SUPABASE_ANON_KEY && SUPABASE_ANON_KEY !== 'YOUR_SUPABASE_ANON_KEY') ? SUPABASE_ANON_KEY.trim() : '';
+      return {
+        url: constUrl || (localStorage.getItem(LS_SB_URL) || '').trim(),
+        key: constKey || (localStorage.getItem(LS_SB_KEY) || '').trim()
+      };
+    }
+
+    function showEntryView(errorMsg = '') {
+      document.getElementById('appShell').classList.add('hidden');
+      document.getElementById('entryView').classList.remove('hidden');
+      const alertEl = document.getElementById('entryAlert');
+      if (errorMsg) {
+        alertEl.textContent = errorMsg;
+        alertEl.classList.remove('hidden');
+      } else {
+        alertEl.classList.add('hidden');
+      }
+      const cfg = getSupabaseConfig();
+      document.getElementById('entryUrlInput').value = cfg.url;
+      document.getElementById('entryKeyInput').value = cfg.key;
+      if (!cfg.url || !cfg.key) {
+        document.getElementById('entryConfigForm').classList.remove('hidden');
+      }
+    }
+
+    async function enterMainApp(mode, userObj) {
+      appState.mode = mode;
+      appState.user = userObj;
+
+      document.getElementById('entryView').classList.add('hidden');
+      document.getElementById('appShell').classList.remove('hidden');
+
+      const avatarWrap = document.getElementById('headerAvatarWrap');
+      const emailEl = document.getElementById('headerUserEmail');
+      const subEl = document.getElementById('headerModeSubtitle');
+      const logoutBtn = document.getElementById('btnLogout');
+
+      if (mode === 'demo') {
+        avatarWrap.innerHTML = '<span class="user-avatar">D</span>';
+        emailEl.textContent = '本機體驗模式';
+        subEl.textContent = 'Demo Mode（本機 localStorage 模擬雲端）';
+        logoutBtn.textContent = '返回登入';
+      } else {
+        const avatarUrl = userObj.user_metadata?.avatar_url || userObj.user_metadata?.picture || '';
+        const email = userObj.email || 'Google 使用者';
+        avatarWrap.innerHTML = avatarUrl
+          ? `<img src="${escapeHtml(avatarUrl)}" alt="大頭貼" class="user-avatar" onerror="this.outerHTML='<span class=\\'user-avatar\\'>G</span>'">`
+          : `<span class="user-avatar">${escapeHtml(email[0].toUpperCase())}</span>`;
+        emailEl.textContent = email;
+        subEl.textContent = 'Supabase 雲端同步・10,000 字詞庫';
+        logoutBtn.textContent = '登出';
+      }
+
+      try {
+        showGlobalBanner('');
+        await ensureVocabLoaded(false);
+        await CloudSync.fetchAllUserData();
+        await loadStudyDate(getLocalTodayStr());
+        switchTab('study');
+      } catch (err) {
+        showGlobalBanner(formatError(err));
+      }
+    }
+
+    async function initSupabase() {
+      const { url, key } = getSupabaseConfig();
+      if (!url || !key) {
+        showEntryView();
+        return;
+      }
+
+      if (!window.supabase || typeof window.supabase.createClient !== 'function') {
+        showEntryView('Supabase SDK 載入失敗，請檢查網路連線或使用「本機體驗模式」。');
+        return;
+      }
+
+      try {
+        if (authUnsubscribe) { authUnsubscribe(); authUnsubscribe = null; }
+        supabaseClient = window.supabase.createClient(url, key);
+
+        const { data: listener } = supabaseClient.auth.onAuthStateChange((event, session) => {
+          if (event === 'SIGNED_IN' && session?.user) {
+            if (appState.mode !== 'cloud' || appState.user?.id !== session.user.id) {
+              enterMainApp('cloud', session.user);
+            }
+          } else if (event === 'SIGNED_OUT') {
+            if (appState.mode === 'cloud') {
+              appState.user = null;
+              showEntryView();
+            }
+          }
+        });
+        authUnsubscribe = () => listener?.subscription?.unsubscribe();
+
+        const { data, error } = await supabaseClient.auth.getSession();
+        if (error) throw error;
+
+        if (data?.session?.user) {
+          await enterMainApp('cloud', data.session.user);
+        } else {
+          showEntryView();
+        }
+      } catch (err) {
+        showEntryView(formatError(err));
+      }
+    }
+
+    /**
+     * ============================================================
+     * 9. 優先綁定所有 DOM 事件（確保任何環境下按鈕皆有反應）
+     * ============================================================
+     */
+    function bindEvents() {
+      // Google 帳號登入
+      document.getElementById('btnGoogleLogin').addEventListener('click', async () => {
+        const { url, key } = getSupabaseConfig();
+        if (!url || !key) {
+          document.getElementById('entryConfigForm').classList.remove('hidden');
+          showEntryView('請先在下方填入 Supabase Project URL 與 Anon Key 後再使用 Google 登入。');
+          return;
+        }
+        if (!supabaseClient) await initSupabase();
+        if (!supabaseClient) return;
+
+        try {
+          const { error } = await supabaseClient.auth.signInWithOAuth({
+            provider: 'google',
+            options: { redirectTo: window.location.origin + window.location.pathname }
+          });
+          if (error) throw error;
+        } catch (err) {
+          showEntryView(formatError(err));
+        }
+      });
+
+      // 進入本機體驗模式
+      document.getElementById('btnEnterDemo').addEventListener('click', () => {
+        enterMainApp('demo', { id: 'demo-user', email: '本機體驗模式' });
+      });
+
+      // 入口頁設定折疊與提交
+      document.getElementById('btnToggleEntryConfig').addEventListener('click', () => {
+        document.getElementById('entryConfigForm').classList.toggle('hidden');
+      });
+      document.getElementById('entryConfigForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const url = document.getElementById('entryUrlInput').value.trim();
+        const key = document.getElementById('entryKeyInput').value.trim();
+        if (!url || !key) return;
+        localStorage.setItem(LS_SB_URL, url);
+        localStorage.setItem(LS_SB_KEY, key);
+        showToast('已儲存 Supabase 設定，請點擊 Google 登入', 'success');
+        await initSupabase();
+      });
+
+      // 登出
+      const doLogout = async () => {
+        if (appState.mode === 'demo') {
+          showEntryView();
+          return;
+        }
+        try {
+          if (supabaseClient) await supabaseClient.auth.signOut();
+          showToast('已登出帳號');
+          showEntryView();
+        } catch (err) {
+          showToast(formatError(err), 'danger');
+        }
+      };
+      document.getElementById('btnLogout').addEventListener('click', doLogout);
+      document.getElementById('btnSettingsLogout').addEventListener('click', doLogout);
+
+      // 主分頁切換
+      document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+      });
+
+      // 日期選擇器與模擬下一天
+      document.getElementById('simDateInput').addEventListener('change', (e) => {
+        if (e.target.value) loadStudyDate(e.target.value);
+      });
+      document.getElementById('btnNextDay').addEventListener('click', () => {
+        const next = addDays(appState.activeDate, 1);
+        loadStudyDate(next);
+        showToast(`已模擬進入下一天：${next}`);
+      });
+      document.getElementById('btnToday').addEventListener('click', () => {
+        const today = getLocalTodayStr();
+        loadStudyDate(today);
+        showToast(`已回到今日：${today}`);
+      });
+
+      // 字卡互動
+      document.getElementById('flashcardBody').addEventListener('click', () => {
+        if (!appState.isAnswerRevealed) {
+          appState.isAnswerRevealed = true;
+          renderStudyTab();
+        }
+      });
+      document.getElementById('btnRevealAnswer').addEventListener('click', (e) => {
+        e.stopPropagation();
+        appState.isAnswerRevealed = true;
+        renderStudyTab();
+      });
+      document.getElementById('btnSpeakWord').addEventListener('click', (e) => {
+        e.stopPropagation();
+        const w = appState.todayList[appState.currentCardIdx]?.word;
+        if (w) speakEnglish(w.term);
+      });
+      document.getElementById('btnSpeakExample').addEventListener('click', (e) => {
+        e.stopPropagation();
+        const w = appState.todayList[appState.currentCardIdx]?.word;
+        if (w?.example) speakEnglish(w.example);
+      });
+      document.getElementById('btnRemembered').addEventListener('click', () => handleRecordReview('remembered'));
+      document.getElementById('btnForgot').addEventListener('click', () => handleRecordReview('forgot'));
+
+      // 一鍵重選未完成清單
+      document.getElementById('btnRerollUnfinished').addEventListener('click', async () => {
+        const unfinishedCount = appState.todayList.filter(a => !a.is_completed).length;
+        if (unfinishedCount === 0) return;
+        const ok = await openConfirmModal(
+          '一鍵重選未完成清單',
+          `將保留已完成的單字，並從未背誦詞庫重新隨機抽取 ${unfinishedCount} 個新單字取代尚未作答的項目。確定要執行嗎？`,
+          '確定重選'
+        );
+        if (!ok) return;
+        try {
+          const res = await CloudSync.rerollUnfinished(appState.activeDate, appState.todayList);
+          if (res.status === 'no_candidates') {
+            showToast('詞庫中已無其他未背誦單字可供替換', 'warning');
+          } else if (res.status === 'ok') {
+            showToast(`已成功重選 ${res.count} 個未完成單字！`, 'success');
+            await loadStudyDate(appState.activeDate);
+          }
+        } catch (err) {
+          showToast(formatError(err), 'danger');
+        }
+      });
+
+      // 重選當前單字
+      document.getElementById('btnRerollCurrentWord').addEventListener('click', async () => {
+        const cur = appState.todayList[appState.currentCardIdx];
+        if (!cur || cur.is_completed) return;
+        try {
+          const res = await CloudSync.rerollSingle(appState.activeDate, cur.id, appState.todayList);
+          if (res.status === 'no_candidates') {
+            showToast('詞庫中已無其他未背誦單字可供替換', 'warning');
+          } else if (res.status === 'ok') {
+            showToast(`已更換為新單字「${res.newWord.term}」`, 'success');
+            appState.todayList = await CloudSync.ensureDateAssignments(appState.activeDate);
+            appState.isAnswerRevealed = false;
+            appState.cardShownAt = performance.now();
+            renderStudyTab();
+          }
+        } catch (err) {
+          showToast(formatError(err), 'danger');
+        }
+      });
+
+      // 右側清單跳轉與單字「換字」
+      document.getElementById('todayWordList').addEventListener('click', async (e) => {
+        const swapBtn = e.target.closest('[data-reroll-assign]');
+        if (swapBtn) {
+          e.stopPropagation();
+          const assignId = swapBtn.dataset.rerollAssign;
+          const idx = Number(swapBtn.dataset.rerollIdx);
+          try {
+            const res = await CloudSync.rerollSingle(appState.activeDate, assignId, appState.todayList);
+            if (res.status === 'no_candidates') {
+              showToast('詞庫中已無其他未背誦單字可供替換', 'warning');
+            } else if (res.status === 'ok') {
+              showToast(`已更換為「${res.newWord.term}」`, 'success');
+              appState.todayList = await CloudSync.ensureDateAssignments(appState.activeDate);
+              if (idx === appState.currentCardIdx) {
+                appState.isAnswerRevealed = false;
+                appState.cardShownAt = performance.now();
+              }
+              renderStudyTab();
+            }
+          } catch (err) {
+            showToast(formatError(err), 'danger');
+          }
+          return;
+        }
+
+        const itemEl = e.target.closest('[data-jump-idx]');
+        if (!itemEl) return;
+        appState.currentCardIdx = Number(itemEl.dataset.jumpIdx);
+        appState.isAnswerRevealed = false;
+        appState.cardShownAt = performance.now();
+        renderStudyTab();
+      });
+
+      // 日曆導覽與點擊
+      document.getElementById('btnPrevMonth').addEventListener('click', () => {
+        appState.calMonth--;
+        if (appState.calMonth < 0) { appState.calMonth = 11; appState.calYear--; }
+        renderCalendarTab();
+      });
+      document.getElementById('btnNextMonth').addEventListener('click', () => {
+        appState.calMonth++;
+        if (appState.calMonth > 11) { appState.calMonth = 0; appState.calYear++; }
+        renderCalendarTab();
+      });
+      document.getElementById('calendarGrid').addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-cal-date]');
+        if (btn) {
+          appState.selectedCalDate = btn.dataset.calDate;
+          renderCalendarTab();
+        }
+      });
+      document.getElementById('btnSwitchToCalDate').addEventListener('click', (e) => {
+        const d = e.currentTarget.dataset.targetDate;
+        if (d) {
+          loadStudyDate(d);
+          switchTab('study');
+          showToast(`已切換至 ${d} 進行背誦`);
+        }
+      });
+
+      // 錯題與日誌篩選與分頁
+      document.getElementById('logResultFilter').addEventListener('change', (e) => {
+        appState.logResultFilter = e.target.value;
+        appState.logsPage = 1;
+        renderRecordsTab();
+      });
+      document.getElementById('btnLogsPrev').addEventListener('click', () => {
+        if (appState.logsPage > 1) { appState.logsPage--; renderRecordsTab(); }
+      });
+      document.getElementById('btnLogsNext').addEventListener('click', () => {
+        appState.logsPage++;
+        renderRecordsTab();
+      });
+
+      // 詞庫搜尋（250ms 防抖）與分頁
+      let searchTimer = null;
+      document.getElementById('wordSearchInput').addEventListener('input', (e) => {
+        clearTimeout(searchTimer);
+        searchTimer = setTimeout(() => {
+          appState.wordSearch = e.target.value;
+          appState.wordsPage = 1;
+          renderSettingsVocabTable();
+        }, 250);
+      });
+      document.getElementById('btnWordsFirst').addEventListener('click', () => { appState.wordsPage = 1; renderSettingsVocabTable(); });
+      document.getElementById('btnWordsPrev').addEventListener('click', () => { if (appState.wordsPage > 1) { appState.wordsPage--; renderSettingsVocabTable(); } });
+      document.getElementById('btnWordsNext').addEventListener('click', () => { appState.wordsPage++; renderSettingsVocabTable(); });
+      document.getElementById('btnWordsLast').addEventListener('click', () => { appState.wordsPage = 999999; renderSettingsVocabTable(); });
+
+      // 重新下載 / 手動上傳 vocab_10k.json
+      document.getElementById('btnReloadVocabJson').addEventListener('click', async () => {
+        await ensureVocabLoaded(true);
+        updateHeaderStats();
+        renderSettingsVocabTable();
+      });
+      const uploadInput = document.getElementById('uploadVocabInput');
+      document.getElementById('btnTriggerUploadVocab').addEventListener('click', () => uploadInput.click());
+      uploadInput.addEventListener('change', async (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        try {
+          setVocabLoadingUI(true, `正在解析 ${file.name}...`, 10);
+          const text = await file.text();
+          const data = JSON.parse(text);
+          if (!Array.isArray(data)) throw new Error('JSON 根結構必須是陣列');
+          await VocabDB.clear();
+          const saved = await VocabDB.bulkPutChunked(data, (done, total) => {
+            const pct = Math.round(15 + (done / total) * 85);
+            setVocabLoadingUI(true, `正在寫入本地 IndexedDB（${done.toLocaleString()} / ${total.toLocaleString()} 字）...`, pct);
+          });
+          setVocabLoadingUI(false);
+          showToast(`已手動匯入 ${saved.toLocaleString()} 個單字！`, 'success');
+          updateHeaderStats();
+          renderSettingsVocabTable();
+          await loadStudyDate(appState.activeDate);
+        } catch (err) {
+          setVocabLoadingUI(false);
+          showToast('匯入失敗：' + (err.message || '檔案格式錯誤'), 'danger');
+        } finally {
+          uploadInput.value = '';
+        }
+      });
+
+      // 設定頁更新 Supabase URL / Key
+      document.getElementById('settingsConfigForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const url = document.getElementById('settingsUrlInput').value.trim();
+        const key = document.getElementById('settingsKeyInput').value.trim();
+        if (!url || !key) return;
+        localStorage.setItem(LS_SB_URL, url);
+        localStorage.setItem(LS_SB_KEY, key);
+        showToast('已更新 Supabase 連線設定，正在重新連線...', 'success');
+        await initSupabase();
+      });
+
+      // 全域朗讀按鈕委派
+      document.body.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-speak]');
+        if (btn) {
+          e.stopPropagation();
+          speakEnglish(btn.dataset.speak);
+        }
+      });
+
+      // Confirm Modal
+      document.getElementById('btnConfirmCancel').addEventListener('click', () => closeConfirmModal(false));
+      document.getElementById('btnConfirmOk').addEventListener('click', () => closeConfirmModal(true));
+
+      // 鍵盤快捷鍵（今日背誦分頁生效）
+      document.addEventListener('keydown', (e) => {
+        if (document.getElementById('appShell').classList.contains('hidden')) return;
+        if (appState.activeTab !== 'study') return;
+        if (['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName)) return;
+        if (!document.getElementById('confirmModal').classList.contains('hidden')) return;
+
+        if (e.code === 'Space') {
+          e.preventDefault();
+          appState.isAnswerRevealed = !appState.isAnswerRevealed;
+          renderStudyTab();
+        } else if (e.key === 's' || e.key === 'S') {
+          const w = appState.todayList[appState.currentCardIdx]?.word;
+          if (w) speakEnglish(w.term);
+        } else if (e.key === '1') {
+          handleRecordReview('remembered');
+        } else if (e.key === '2') {
+          handleRecordReview('forgot');
+        }
+      });
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      bindEvents();
+      initSupabase().catch(() => showEntryView());
+    });
+  </script>
+</body>
+</html>
